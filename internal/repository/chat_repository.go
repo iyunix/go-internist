@@ -11,13 +11,6 @@ import (
     "gorm.io/gorm"
 )
 
-type ChatRepository interface {
-    FindByUserID(ctx context.Context, userID uint) ([]domain.Chat, error)
-    FindByID(ctx context.Context, chatID uint) (*domain.Chat, error)
-    Create(ctx context.Context, chat *domain.Chat) (*domain.Chat, error)
-    Delete(ctx context.Context, chatID, userID uint) error
-    // Optionally: SoftDelete(ctx, chatID, userID uint) error
-}
 
 type gormChatRepository struct {
     db *gorm.DB
