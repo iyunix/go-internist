@@ -2,28 +2,64 @@
 package middleware
 
 import (
-	"log"
-	"net/http"
-	"time"
+    "encoding/json"
+    "log"
+    "math/rand"
+    "net/http"
+    "time"
 )
 
-// LoggingMiddleware logs incoming HTTP request & response details.
+type logEntry struct {
+    Timestamp    string `json:"timestamp"`
+    Method       string `json:"method"`
+    Path         string `json:"path"`
+    RemoteAddr   string `json:"remote_addr"`
+    RequestID    string `json:"request_id"`
+    StatusCode   int    `json:"status_code"`
+    DurationMS   int64  `json:"duration_ms"`
+}
+
+// generateRequestID creates a random string for identifying each request
+func generateRequestID() string {
+    letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    b := make([]rune, 12)
+    for i := range b {
+        b[i] = letters[rand.Intn(len(letters))]
+    }
+    return string(b)
+}
+
+// LoggingMiddleware writes structured logs for each request
 func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Record the start time of the request
-		start := time.Now()
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        start := time.Now()
+        requestID := generateRequestID()
 
-		// Call the next handler in the chain (e.g., our router).
-		// This is the line that actually processes the request.
-		next.ServeHTTP(w, r)
+        // Use a response writer wrapper to capture status code
+        lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+        next.ServeHTTP(lrw, r)
 
-		// After the request has been handled, log the details.
-		log.Printf(
-			"Request: %s %s from %s | Duration: %v",
-			r.Method,
-			r.RequestURI,
-			r.RemoteAddr,
-			time.Since(start),
-		)
-	})
+        entry := logEntry{
+            Timestamp:  start.Format(time.RFC3339Nano),
+            Method:     r.Method,
+            Path:       r.URL.Path,
+            RemoteAddr: r.RemoteAddr,
+            RequestID:  requestID,
+            StatusCode: lrw.statusCode,
+            DurationMS: time.Since(start).Milliseconds(),
+        }
+        b, _ := json.Marshal(entry)
+        log.Println(string(b))
+    })
+}
+
+// loggingResponseWriter wraps http.ResponseWriter to record status code
+type loggingResponseWriter struct {
+    http.ResponseWriter
+    statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+    lrw.statusCode = code
+    lrw.ResponseWriter.WriteHeader(code)
 }
