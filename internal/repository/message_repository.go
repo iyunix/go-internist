@@ -5,16 +5,9 @@ import (
     "context"
     "errors"
     "log"
-
     "github.com/iyunix/go-internist/internal/domain"
     "gorm.io/gorm"
 )
-
-type MessageRepository interface {
-    FindByChatID(ctx context.Context, chatID uint) ([]domain.Message, error)
-    Create(ctx context.Context, message *domain.Message) (*domain.Message, error)
-    // Optionally add: FindByChatIDPaginated(ctx, chatID uint, offset, limit int) ([]domain.Message, error)
-}
 
 type gormMessageRepository struct {
     db *gorm.DB
