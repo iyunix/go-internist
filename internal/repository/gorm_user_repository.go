@@ -5,7 +5,6 @@ import (
     "context"
     "errors"
     "log"
-
     "github.com/iyunix/go-internist/internal/domain"
     "gorm.io/gorm"
 )
