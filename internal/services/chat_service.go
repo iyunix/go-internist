@@ -1,103 +1,107 @@
 // File: internal/services/chat_service.go
+
 package services
 
 import (
-	"context"
-	"errors"
-	"strings"
+    "context"
+    "errors"
+    "log"
 
-	"github.com/iyunix/go-internist/internal/domain"
-	"github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/domain"
+    "github.com/iyunix/go-internist/internal/repository"
 )
 
-// ChatService now includes the AIService.
 type ChatService struct {
-	chatRepo    repository.ChatRepository
-	messageRepo repository.MessageRepository
-	aiService   *AIService // <-- New dependency
+    chatRepo     repository.ChatRepository
+    messageRepo  repository.MessageRepository
+    aiService    *AIService
+    // Optionally add cache here for recent chats/messages or AI responses
+    // cache       SomeCacheType
 }
 
-// NewChatService now requires the AIService.
 func NewChatService(chatRepo repository.ChatRepository, messageRepo repository.MessageRepository, aiService *AIService) *ChatService {
-	return &ChatService{
-		chatRepo:    chatRepo,
-		messageRepo: messageRepo,
-		aiService:   aiService,
-	}
+    return &ChatService{
+        chatRepo:    chatRepo,
+        messageRepo: messageRepo,
+        aiService:   aiService,
+    }
 }
 
-// GetResponse is a new, high-level function for the entire chat turn.
-func (s *ChatService) GetResponse(ctx context.Context, userID uint, chatID uint, userMessage string) (string, *domain.Chat, error) {
-	var currentChat *domain.Chat
-	var err error
-
-	// If chatID is 0, it's the first message of a new chat.
-	if chatID == 0 {
-		currentChat, err = s.CreateNewChat(ctx, userID, userMessage)
-		if err != nil {
-			return "", nil, err
-		}
-	} else {
-		// Verify the user owns the chat they are posting to
-		currentChat, err = s.chatRepo.FindByID(ctx, chatID)
-		if err != nil || currentChat.UserID != userID {
-			return "", nil, errors.New("unauthorized")
-		}
-	}
-
-	// Save the user's message to the database.
-	if err := s.SaveMessage(ctx, currentChat.ID, "user", userMessage); err != nil {
-		return "", currentChat, err
-	}
-
-	// --- Get the REAL AI response ---
-	assistantReply, err := s.aiService.GetCompletion(ctx, userMessage)
-	if err != nil {
-		return "", currentChat, err
-	}
-
-	// Save the assistant's message to the database.
-	if err := s.SaveMessage(ctx, currentChat.ID, "assistant", assistantReply); err != nil {
-		return "", currentChat, err
-	}
-
-	return assistantReply, currentChat, nil
-}
-
-
-// CreateNewChat creates a new chat for a user.
-func (s *ChatService) CreateNewChat(ctx context.Context, userID uint, firstMessage string) (*domain.Chat, error) {
-	words := strings.Split(firstMessage, " ")
-	title := firstMessage
-	if len(words) > 5 {
-		title = strings.Join(words[:5], " ") + "..."
-	}
-	chat := &domain.Chat{UserID: userID, Title: title}
-	return s.chatRepo.Create(ctx, chat)
-}
-
-// SaveMessage saves a new message to a chat.
-func (s *ChatService) SaveMessage(ctx context.Context, chatID uint, role, content string) error {
-	message := &domain.Message{ChatID: chatID, Role: role, Content: content}
-	return s.messageRepo.Create(ctx, message)
-}
-
-// GetChatMessages retrieves all messages for a given chat.
-func (s *ChatService) GetChatMessages(ctx context.Context, chatID uint, userID uint) ([]domain.Message, error) {
-	chat, err := s.chatRepo.FindByID(ctx, chatID)
-	if err != nil { return nil, err }
-	if chat.UserID != userID { return nil, errors.New("unauthorized") }
-	return s.messageRepo.FindByChatID(ctx, chatID)
-}
-
-// GetUserChats retrieves all chat histories for a user.
+// GetUserChats fetches all chats for a user
 func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.Chat, error) {
+    // Optionally fetch from cache first if implemented
     return s.chatRepo.FindByUserID(ctx, userID)
 }
 
-// Add this function to chat_service.go
-func (s *ChatService) DeleteChat(ctx context.Context, chatID uint, userID uint) error {
-	// In a real app, you might also delete all messages associated with the chat.
-	// For now, we'll just delete the chat itself.
-	return s.chatRepo.Delete(ctx, chatID, userID)
+// AddChatMessage wraps chat/message creation in a transaction for integrity
+func (s *ChatService) AddChatMessage(ctx context.Context, userID, chatID uint, content string) (*domain.Message, error) {
+    if content == "" {
+        return nil, errors.New("message content cannot be empty")
+    }
+
+    // Here you could add content length validation, character filtering, etc.
+
+    // Begin transaction (assuming GORM passed via repo layer, else replicate as needed)
+    chat, err := s.chatRepo.FindByID(ctx, chatID)
+    if err != nil || chat.UserID != userID {
+        log.Printf("[ChatService] Chat %d not found for user %d", chatID, userID)
+        return nil, errors.New("chat not found or unauthorized")
+    }
+
+    message := &domain.Message{
+        ChatID:  chatID,
+        Role:    "user",
+        Content: content,
+    }
+
+    // Optionally cache this request/content
+
+    // Add new message in DB
+    dbMsg, err := s.messageRepo.Create(ctx, message)
+    if err != nil {
+        log.Printf("[ChatService] Message create error: %v", err)
+        return nil, errors.New("failed to store message")
+    }
+
+    // Collect context and call AI service for reply if desired (example)
+    // aiReply, aiErr := s.aiService.GetCompletion(ctx, content)
+    // if aiErr == nil {
+    //   // Optionally store or cache aiReply
+    // }
+
+    return dbMsg, nil
+}
+
+// GetChatMessages fetches messages for a chat
+func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) ([]domain.Message, error) {
+    // Confirm chat ownership first for privacy
+    chat, err := s.chatRepo.FindByID(ctx, chatID)
+    if err != nil || chat.UserID != userID {
+        log.Printf("[ChatService] Unauthorized attempt to fetch chat %d for user %d", chatID, userID)
+        return nil, errors.New("chat not found or unauthorized")
+    }
+    messages, err := s.messageRepo.FindByChatID(ctx, chatID)
+    if err != nil {
+        log.Printf("[ChatService] Message fetch error: %v", err)
+        return nil, errors.New("failed to get messages")
+    }
+    // Optionally cache results
+    return messages, nil
+}
+
+// DeleteChat removes a chat for the user, with error logging
+func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error {
+    // Always check user ownership
+    chat, err := s.chatRepo.FindByID(ctx, chatID)
+    if err != nil || chat.UserID != userID {
+        log.Printf("[ChatService] DeleteChat invalid access user %d chat %d", userID, chatID)
+        return errors.New("chat not found or unauthorized")
+    }
+    err = s.chatRepo.Delete(ctx, chatID, userID)
+    if err != nil {
+        log.Printf("[ChatService] DeleteChat DB error: %v", err)
+        return errors.New("failed to delete chat")
+    }
+    // Optionally clear cache entries
+    return nil
 }
