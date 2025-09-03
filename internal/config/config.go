@@ -3,11 +3,9 @@
 package config
 
 import (
-    "fmt"
     "log"
     "os"
     "strings"
-
     "github.com/joho/godotenv"
 )
 
@@ -58,7 +56,6 @@ func Load() *Config {
         if cfg.PineconeAPIKey == "" {
             missing = append(missing, "PINECONE_API_KEY")
         }
-
         if len(missing) > 0 {
             log.Fatalf("Missing required environment variables for production: %v", missing)
         }
