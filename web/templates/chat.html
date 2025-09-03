@@ -1,0 +1,42 @@
+{{template "layout.html" .}}
+
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/chat.css">
+{{end}}
+
+{{define "content"}}
+<div class="chat-layout">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a href="/chat" id="newChatBtn" class="new-chat-btn">+ New Chat</a>
+        </div>
+        
+        <div class="chat-history">
+            <h3 class="history-title">Recent Chats</h3>
+            <ul class="history-list" id="historyList">
+                </ul>
+        </div>
+    </aside>
+
+    <main class="chat-main">
+        <header class="chat-header-main">
+            <h2>Internist</h2>
+        </header>
+
+        <ul class="messages" id="chatMessages">
+            </ul>
+
+        <div class="input-form-container">
+            <form class="input-form" id="chatForm">
+                <textarea id="chatInput" placeholder="Ask me anything…" rows="1"></textarea>
+                <button type="submit" aria-label="Send">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" /></svg>
+                </button>
+            </form>
+            <small class="disclaimer">
+                Internist may display inaccurate info; double-check its responses.
+            </small>
+        </div>
+    </main>
+</div>
+{{end}}

@@ -1,0 +1,28 @@
+{{template "layout.html" .}}
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/auth.css">
+{{end}}
+{{define "content"}}
+<div class="auth-form">
+    <h2>Create an Account</h2>
+    {{if .Error}}
+    <p class="error">{{.Error}}</p>
+    {{end}}
+    <form action="/register" method="POST">
+        <div>
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" required>
+        </div>
+        <div>
+            <label for="phone_number">Phone Number</label>
+            <input id="phone_number" name="phone_number" type="text" required>
+        </div>
+        <div>
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required minlength="8">
+        </div>
+        <button type="submit">Sign Up</button>
+    </form>
+    <p>Already have an account? <a href="/login">Log in</a></p>
+</div>
+{{end}}
