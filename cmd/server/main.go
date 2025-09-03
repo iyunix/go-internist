@@ -58,8 +58,8 @@ func main() {
     }).Methods("GET")
 
     // Static files
-    fs := http.FileServer(http.Dir("./web/static/"))
-    r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+    r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+
 
     // Public routes
     r.HandleFunc("/", pageHandler.ShowLoginPage).Methods("GET")
