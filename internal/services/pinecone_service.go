@@ -2,59 +2,87 @@
 package services
 
 import (
-	"context"
-	"errors"
-	"log"
+    "context"
+    "errors"
+    "log"
+    "time"
 
-	"github.com/pinecone-io/go-pinecone/v4/pinecone"
+    pinecone "github.com/pinecone-io/go-pinecone/pinecone"
 )
 
 type PineconeService struct {
-	index     *pinecone.IndexConnection
-	namespace string
+    client     *pinecone.Client
+    indexName  string
+    namespace  string
+    timeout    time.Duration // For API call timeouts
+    maxRetries int           // For retry logic
 }
 
-// NewPineconeService initializes the connection to the Pinecone index.
-func NewPineconeService(apiKey, indexName, namespace string) (*PineconeService, error) {
-	pc, err := pinecone.NewClient(pinecone.NewClientConfig{
-		APIKey: apiKey,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	idx, err := pc.Index(indexName)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Println("✅ Pinecone client initialized successfully.")
-	return &PineconeService{index: idx, namespace: namespace}, nil
+func NewPineconeService(apiKey, indexName, namespace string) *PineconeService {
+    client := pinecone.NewClient(apiKey)
+    return &PineconeService{
+        client:     client,
+        indexName:  indexName,
+        namespace:  namespace,
+        timeout:    8 * time.Second,
+        maxRetries: 3,
+    }
 }
 
-// Query finds the most relevant documents for a given vector.
-func (s *PineconeService) Query(ctx context.Context, vector []float32) (string, error) {
-	queryResult, err := s.index.Query(ctx, &pinecone.QueryRequest{
-		Vector:          vector,
-		TopK:            15,
-		IncludeMetadata: true,
-		Namespace:       s.namespace,
-	})
-	if err != nil {
-		return "", err
-	}
+// retryWithTimeout wraps Pinecone API calls
+func (s *PineconeService) retryWithTimeout(call func(ctx context.Context) error) error {
+    for attempt := 1; attempt <= s.maxRetries; attempt++ {
+        ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+        defer cancel()
+        err := call(ctx)
+        if err == nil {
+            return nil
+        }
+        log.Printf("[PineconeService] Attempt %d/%d failed: %v", attempt, s.maxRetries, err)
+        time.Sleep(time.Duration(attempt) * time.Second)
+    }
+    return errors.New("pinecone: operation failed after retries")
+}
 
-	if len(queryResult.Matches) == 0 {
-		return "", errors.New("no relevant documents found in Pinecone")
-	}
+// UpsertVector upserts a vector embedding with retry and timeout
+func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]string) error {
+    return s.retryWithTimeout(func(ctx context.Context) error {
+        upsertReq := pinecone.UpsertRequest{
+            IndexName: s.indexName,
+            Namespace: s.namespace,
+            Vectors: []pinecone.Vector{
+                {
+                    ID:       id,
+                    Values:   values,
+                    Metadata: metadata,
+                },
+            },
+        }
+        _, err := s.client.Upsert(ctx, upsertReq)
+        return err
+    })
+}
 
-	// Combine the text from the retrieved documents to create the context.
-	var contextText string
-	for _, match := range queryResult.Matches {
-		if text, ok := match.Metadata["text"].(string); ok {
-			contextText += text + "\n\n"
-		}
-	}
-
-	return contextText, nil
+// QuerySimilar queries for similar documents with reliability
+func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]pinecone.Match, error) {
+    var result []pinecone.Match
+    err := s.retryWithTimeout(func(ctx context.Context) error {
+        queryReq := pinecone.QueryRequest{
+            IndexName: s.indexName,
+            Namespace: s.namespace,
+            TopK:      topK,
+            Values:    embedding,
+        }
+        resp, err := s.client.Query(ctx, queryReq)
+        if err != nil {
+            return err
+        }
+        result = resp.Matches
+        return nil
+    })
+    if err != nil {
+        log.Printf("[PineconeService] QuerySimilar failed: %v", err)
+        return nil, err
+    }
+    return result, nil
 }
