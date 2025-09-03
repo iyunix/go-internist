@@ -1,42 +1,80 @@
 // File: internal/repository/chat_repository.go
+
 package repository
 
 import (
-	"context"
+    "context"
+    "errors"
+    "log"
 
-	"github.com/iyunix/go-internist/internal/domain"
-	"gorm.io/gorm"
+    "github.com/iyunix/go-internist/internal/domain"
+    "gorm.io/gorm"
 )
 
-type chatRepository struct {
-	db *gorm.DB
+type ChatRepository interface {
+    FindByUserID(ctx context.Context, userID uint) ([]domain.Chat, error)
+    FindByID(ctx context.Context, chatID uint) (*domain.Chat, error)
+    Create(ctx context.Context, chat *domain.Chat) (*domain.Chat, error)
+    Delete(ctx context.Context, chatID, userID uint) error
+    // Optionally: SoftDelete(ctx, chatID, userID uint) error
+}
+
+type gormChatRepository struct {
+    db *gorm.DB
 }
 
 func NewChatRepository(db *gorm.DB) ChatRepository {
-	return &chatRepository{db: db}
+    return &gormChatRepository{db: db}
 }
 
-// Add this function to chat_repository.go
-func (r *chatRepository) Delete(ctx context.Context, chatID uint, userID uint) error {
-	// We include UserID in the where clause to ensure a user can only delete their own chats.
-	return r.db.WithContext(ctx).Where("id = ? AND user_id = ?", chatID, userID).Delete(&domain.Chat{}).Error
+func (r *gormChatRepository) FindByUserID(ctx context.Context, userID uint) ([]domain.Chat, error) {
+    var chats []domain.Chat
+    err := r.db.WithContext(ctx).
+        Where("user_id = ?", userID).
+        Order("updated_at desc").
+        Find(&chats).Error
+    if err != nil {
+        log.Printf("[ChatRepository] FindByUserID error: user_id=%d %v", userID, err)
+        return nil, errors.New("database error fetching chats")
+    }
+    return chats, nil
 }
 
-func (r *chatRepository) Create(ctx context.Context, chat *domain.Chat) (*domain.Chat, error) {
-	if err := r.db.WithContext(ctx).Create(chat).Error; err != nil {
-		return nil, err
-	}
-	return chat, nil
+func (r *gormChatRepository) FindByID(ctx context.Context, chatID uint) (*domain.Chat, error) {
+    var chat domain.Chat
+    err := r.db.WithContext(ctx).First(&chat, chatID).Error
+    if err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            return nil, errors.New("chat not found")
+        }
+        log.Printf("[ChatRepository] FindByID error: chat_id=%d %v", chatID, err)
+        return nil, errors.New("database error finding chat")
+    }
+    return &chat, nil
 }
 
-func (r *chatRepository) FindByID(ctx context.Context, id uint) (*domain.Chat, error) {
-	var chat domain.Chat
-	err := r.db.WithContext(ctx).First(&chat, id).Error
-	return &chat, err
+func (r *gormChatRepository) Create(ctx context.Context, chat *domain.Chat) (*domain.Chat, error) {
+    err := r.db.WithContext(ctx).Create(chat).Error
+    if err != nil {
+        log.Printf("[ChatRepository] Create error: %v", err)
+        return nil, errors.New("database error creating chat")
+    }
+    // Optionally log/audit
+    return chat, nil
 }
 
-func (r *chatRepository) FindByUserID(ctx context.Context, userID uint) ([]domain.Chat, error) {
-	var chats []domain.Chat
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("updated_at DESC").Find(&chats).Error
-	return chats, err
+func (r *gormChatRepository) Delete(ctx context.Context, chatID, userID uint) error {
+    // Only delete if the chat belongs to the user
+    result := r.db.WithContext(ctx).
+        Where("id = ? AND user_id = ?", chatID, userID).
+        Delete(&domain.Chat{})
+    if result.Error != nil {
+        log.Printf("[ChatRepository] Delete error: chat_id=%d user_id=%d %v", chatID, userID, result.Error)
+        return errors.New("database error deleting chat")
+    }
+    if result.RowsAffected == 0 {
+        return errors.New("chat not found or unauthorized")
+    }
+    // Optionally change to soft-delete for recoverability
+    return nil
 }
