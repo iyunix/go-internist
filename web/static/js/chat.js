@@ -38,7 +38,14 @@ document.addEventListener("DOMContentLoaded", function () {
             const messages = await response.json();
             chatMessages.innerHTML = "";
             if (messages) {
-                messages.forEach(msg => appendMessage(msg.Content, msg.Role));
+                // --- THIS IS THE FIX ---
+                // Handle both capitalized (msg.Content) and lowercase (msg.content) properties
+                // to make the rendering robust.
+                messages.forEach(msg => {
+                    const content = msg.Content || msg.content;
+                    const role = msg.Role || msg.role;
+                    appendMessage(content, role);
+                });
             }
             currentChatID = chatID;
             document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
@@ -135,21 +142,22 @@ document.addEventListener("DOMContentLoaded", function () {
         const msg = chatInput.value.trim();
         if (!msg) return;
 
+
         appendMessage(msg, "user");
-        const originalMsg = chatInput.value;
         chatInput.value = "";
         chatInput.dir = 'ltr';
         chatInput.style.height = "auto";
-        
         setLoading(true);
 
         const endpoint = currentChatID ? `/api/chats/${currentChatID}/messages` : "/api/chats";
 
         try {
+            let bodyObj = { content: msg };
+            if (currentChatID !== null && currentChatID !== undefined) bodyObj.chat_id = currentChatID;
             const response = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: originalMsg }),
+                body: JSON.stringify(bodyObj)
             });
 
             setLoading(false);

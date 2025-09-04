@@ -12,13 +12,34 @@ import (
 
 // Template cache to avoid parsing templates on every request
 var (
-    templates     *template.Template
-    templatesOnce sync.Once
+    templateCache     map[string]*template.Template
+    templateCacheOnce sync.Once
 )
 
-// loadTemplates loads and caches all templates (call once, thread-safe)
-func loadTemplates() {
-    templates = template.Must(template.ParseGlob("web/templates/*.html"))
+// loadTemplateCache creates separate template sets for each page
+func loadTemplateCache() {
+    templateCache = make(map[string]*template.Template)
+    
+    // List of templates that need individual caching
+    templates := []string{"login.html", "register.html", "chat.html"}
+    
+    for _, tmpl := range templates {
+        ts := template.New(tmpl)
+        
+        // Parse layout first
+        ts, err := ts.ParseFiles("web/templates/layout.html")
+        if err != nil {
+            log.Fatalf("Error parsing layout for %s: %v", tmpl, err)
+        }
+        
+        // Parse the specific template
+        ts, err = ts.ParseFiles("web/templates/" + tmpl)
+        if err != nil {
+            log.Fatalf("Error parsing %s: %v", tmpl, err)
+        }
+        
+        templateCache[tmpl] = ts
+    }
 }
 
 // Adds basic security headers for all responses
@@ -41,9 +62,9 @@ func NewPageHandler() *PageHandler {
     return &PageHandler{}
 }
 
-// renderTemplate uses template cache and injects CSRF/security headers
+// renderTemplate uses individual template cache and injects CSRF/security headers
 func renderTemplate(w http.ResponseWriter, tmpl string, data map[string]interface{}) {
-    templatesOnce.Do(loadTemplates)
+    templateCacheOnce.Do(loadTemplateCache)
     addSecurityHeaders(w)
 
     // Add CSRF to template data
@@ -52,7 +73,14 @@ func renderTemplate(w http.ResponseWriter, tmpl string, data map[string]interfac
     }
     data["CSRFToken"] = generateCSRFToken()
 
-    err := templates.ExecuteTemplate(w, tmpl, data)
+    t, ok := templateCache[tmpl]
+    if !ok {
+        log.Printf("Template %s not found in cache", tmpl)
+        http.Error(w, "Template not found", http.StatusInternalServerError)
+        return
+    }
+
+    err := t.ExecuteTemplate(w, tmpl, data)
     if err != nil {
         log.Printf("Template render error for %s: %v", tmpl, err)
         http.Error(w, "Error rendering page", http.StatusInternalServerError)

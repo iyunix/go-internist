@@ -8,7 +8,6 @@ import (
     "os/signal"
     "syscall"
     "time"
-
     "github.com/glebarez/sqlite"
     "github.com/gorilla/mux"
     "github.com/iyunix/go-internist/internal/config"
@@ -18,10 +17,12 @@ import (
     "github.com/iyunix/go-internist/internal/repository"
     "github.com/iyunix/go-internist/internal/services"
     "gorm.io/gorm"
+
 )
 
 func main() {
     cfg := config.Load()
+
 
     // --- Database Setup ---
     db, err := gorm.Open(sqlite.Open("notebook.db"), &gorm.Config{})
@@ -49,17 +50,17 @@ func main() {
     authMiddleware := middleware.NewJWTMiddleware(cfg.JWTSecretKey)
 
     r := mux.NewRouter()
-    r.Use(middleware.LoggingMiddleware)
-
+    // Global middlewares (order matters: recover first, then logging)
+    r.Use(middleware.RecoverPanic)     // catches panics and returns 500 without crashing the server
+    r.Use(middleware.LoggingMiddleware) // your existing logger; or middleware.RequestLogger if that's your logger
     // Health check endpoint
     r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusOK)
         w.Write([]byte("OK"))
     }).Methods("GET")
 
-    // Static files
-    r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
-
+    // Static files (served directly from disk)
+    r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
     // Public routes
     r.HandleFunc("/", pageHandler.ShowLoginPage).Methods("GET")

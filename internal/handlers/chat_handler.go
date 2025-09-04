@@ -1,15 +1,16 @@
 // File: internal/handlers/chat_handler.go
 package handlers
 
+
 import (
     "encoding/json"
+    "io"
     "log"
     "net/http"
     "strconv"
     "strings"
 
     "github.com/gorilla/mux"
-    "github.com/iyunix/go-internist/internal/domain"
     "github.com/iyunix/go-internist/internal/middleware"
     "github.com/iyunix/go-internist/internal/services"
 )
@@ -87,39 +88,61 @@ func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(pagedChats)
 }
 
-// HandleChatMessage creates a message with input sanitation and audit logging
+
+// in internal/handlers/chat_handler.go
+
+// HandleChatMessage creates a message and returns the AI's reply.
 func (h *ChatHandler) HandleChatMessage(w http.ResponseWriter, r *http.Request) {
-    userID, ok := r.Context().Value(middleware.UserIDKey("userID")).(uint)
-    if !ok || userID == 0 {
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
-    var req struct {
-        ChatID   uint   `json:"chat_id"`
-        Content  string `json:"content"`
-    }
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "Invalid data", http.StatusBadRequest)
-        return
-    }
-    req.Content = sanitizeMessageContent(req.Content)
-    if req.Content == "" {
-        http.Error(w, "Message content required", http.StatusBadRequest)
-        return
-    }
+	userID, ok := r.Context().Value(middleware.UserIDKey("userID")).(uint)
+	if !ok || userID == 0 {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		ChatID  *uint  `json:"chat_id"`
+		Content string `json:"content"`
+	}
+	// Debugging code for reading the body
+	bodyBytes, _ := io.ReadAll(r.Body)
+	log.Printf("[DEBUG] Raw request body: %s", string(bodyBytes))
+	if err := json.NewDecoder(strings.NewReader(string(bodyBytes))).Decode(&req); err != nil {
+		http.Error(w, "Invalid data", http.StatusBadRequest)
+		return
+	}
+	log.Printf("[DEBUG] Decoded struct: chat_id=%v, content=%q", req.ChatID, req.Content)
 
-    // Log the new message action (audit trail)
-    log.Printf("[ChatHandler] User %d posted message to chat %d", userID, req.ChatID)
+	req.Content = sanitizeMessageContent(req.Content)
+	if req.Content == "" {
+		http.Error(w, "Message content required", http.StatusBadRequest)
+		return
+	}
 
-    response, err := h.ChatService.AddChatMessage(r.Context(), userID, req.ChatID, req.Content)
-    if err != nil {
-        log.Printf("[ChatHandler] AddChatMessage error user %d chat %d: %v", userID, req.ChatID, err)
-        http.Error(w, "Failed to send message", http.StatusInternalServerError)
-        return
-    }
+	var chatID uint
+	isNewChat := req.ChatID == nil
+	if !isNewChat {
+		chatID = *req.ChatID
+	}
+	log.Printf("[ChatHandler] User %d posted message to chat %d", userID, chatID)
 
-    json.NewEncoder(w).Encode(response)
+	// Call the updated service function
+	aiReply, chat, err := h.ChatService.AddChatMessage(r.Context(), userID, chatID, req.Content)
+	if err != nil {
+		log.Printf("[ChatHandler] AddChatMessage error user %d chat %d: %v", userID, chatID, err)
+		http.Error(w, "Failed to send message", http.StatusInternalServerError)
+		return
+	}
+
+	// --- BUILD THE CORRECT JSON RESPONSE ---
+	response := make(map[string]interface{})
+	response["reply"] = aiReply
+	if isNewChat {
+		response["chat"] = chat
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
+
 
 // GetChatMessages returns paginated messages for a chat
 func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
