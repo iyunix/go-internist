@@ -10,16 +10,15 @@ import (
 )
 
 type logEntry struct {
-    Timestamp    string `json:"timestamp"`
-    Method       string `json:"method"`
-    Path         string `json:"path"`
-    RemoteAddr   string `json:"remote_addr"`
-    RequestID    string `json:"request_id"`
-    StatusCode   int    `json:"status_code"`
-    DurationMS   int64  `json:"duration_ms"`
+    Timestamp  string `json:"timestamp"`
+    Method     string `json:"method"`
+    Path       string `json:"path"`
+    RemoteAddr string `json:"remote_addr"`
+    RequestID  string `json:"request_id"`
+    StatusCode int    `json:"status_code"`
+    DurationMS int64  `json:"duration_ms"`
 }
 
-// generateRequestID creates a random string for identifying each request
 func generateRequestID() string {
     letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     b := make([]rune, 12)
@@ -29,13 +28,11 @@ func generateRequestID() string {
     return string(b)
 }
 
-// LoggingMiddleware writes structured logs for each request
 func LoggingMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
         requestID := generateRequestID()
 
-        // Use a response writer wrapper to capture status code
         lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
         next.ServeHTTP(lrw, r)
 
@@ -53,7 +50,6 @@ func LoggingMiddleware(next http.Handler) http.Handler {
     })
 }
 
-// loggingResponseWriter wraps http.ResponseWriter to record status code
 type loggingResponseWriter struct {
     http.ResponseWriter
     statusCode int
@@ -62,4 +58,11 @@ type loggingResponseWriter struct {
 func (lrw *loggingResponseWriter) WriteHeader(code int) {
     lrw.statusCode = code
     lrw.ResponseWriter.WriteHeader(code)
+}
+
+// Forward Flush to the underlying writer to support streaming (SSE).
+func (lrw *loggingResponseWriter) Flush() {
+    if f, ok := lrw.ResponseWriter.(http.Flusher); ok {
+        f.Flush()
+    }
 }

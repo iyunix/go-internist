@@ -1,3 +1,4 @@
+// File: cmd/diagnostics/jabir_test.go
 package main
 
 import (
@@ -11,7 +12,7 @@ import (
 )
 
 func main() {
-	log.Println("--- Running LLM Performance Test ---")
+	log.Println("--- Running Jabir LLM Performance Test ---")
 
 	// --- Test Parameters ---
 	const testRuns = 3 // Run the test 3 times to get a stable average
@@ -21,11 +22,18 @@ func main() {
 		log.Fatalf("FATAL: Error loading .env file. Make sure it exists at the project root. Error: %v", err)
 	}
 
-	// --- 2. Get and Validate Environment Variable ---
-	llmAPIKey := getEnvOrFatal("AVALAI_API_KEY_LLM")
+	// --- 2. Get and Validate Jabir Environment Variable ---
+	jabirAPIKey := getEnvOrFatal("JABIR_API_KEY")
 
-	// --- 3. Initialize AI Service ---
-	aiService := services.NewAIService("", llmAPIKey) // Embedding key is not needed
+	// --- 3. Initialize AI Service for Jabir ---
+	// We provide the specific BaseURL for the Jabir project.
+	aiService := services.NewAIService(
+		"", // No embedding key needed
+		jabirAPIKey,
+		"", // No embedding URL needed
+		"https://openai.jabirproject.org/v1", // Jabir LLM Base URL
+		"", // No embedding model name needed
+	)
 
 	testPrompt := "Explain what a beta-blocker is in simple terms, in about 100 words."
 	log.Printf("Test Prompt: \"%s\"\n\n", testPrompt)
@@ -33,26 +41,27 @@ func main() {
 
 	// --- 4. Measure LLM Completion Time (multiple runs) ---
 	var totalCompletionDuration time.Duration
-	var completionDurations []time.Duration
 
 	for i := 1; i <= testRuns; i++ {
 		startCompletion := time.Now()
-		reply, err := aiService.GetCompletion(context.Background(), testPrompt)
+		// Call the GetCompletion function with the specific model name "jabir-400b"
+		reply, err := aiService.GetCompletion(context.Background(), "jabir-400b", testPrompt)
 		if err != nil {
 			log.Printf("ERROR: Completion run #%d failed: %v", i, err)
 			continue
 		}
 		durationCompletion := time.Since(startCompletion)
-		completionDurations = append(completionDurations, durationCompletion)
 		totalCompletionDuration += durationCompletion
 		log.Printf("[TIMING] Completion run #%d took: %s (response length: %d)", i, durationCompletion, len(reply))
 	}
 
 	// --- 5. Print Summary ---
-	avgCompletionTime := totalCompletionDuration / time.Duration(testRuns)
-	log.Printf("\n--- Test Summary ---")
-	log.Printf("Average completion latency over %d runs: %s", testRuns, avgCompletionTime)
-	log.Println("--------------------")
+	if testRuns > 0 {
+		avgCompletionTime := totalCompletionDuration / time.Duration(testRuns)
+		log.Printf("\n--- Test Summary ---")
+		log.Printf("Average completion latency over %d runs: %s", testRuns, avgCompletionTime)
+		log.Println("--------------------")
+	}
 }
 
 // getEnvOrFatal retrieves an environment variable or exits if it's not set.

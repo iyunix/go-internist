@@ -1,3 +1,4 @@
+// File: web/static/js/chat.js
 document.addEventListener("DOMContentLoaded", function () {
     const chatForm = document.getElementById("chatForm");
     const chatInput = document.getElementById("chatInput");
@@ -5,212 +6,192 @@ document.addEventListener("DOMContentLoaded", function () {
     const newChatBtn = document.getElementById("newChatBtn");
     const historyList = document.getElementById("historyList");
 
-    let currentChatID = null;
+    let activeChatId = new URLSearchParams(window.location.search).get("id");
 
-    async function loadHistory() {
-        try {
-            const response = await fetch("/api/chats");
-            if (!response.ok) return;
-            const chats = await response.json();
-            historyList.innerHTML = "";
-            if (chats) {
-                chats.forEach(chat => createHistoryItemDOM(chat.Title, chat.ID));
-            }
-        } catch (error) {
-            console.error("Failed to load history:", error);
-        }
-    }
+    // --- Main Submit Handler ---
+    chatForm.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const prompt = chatInput.value.trim();
+        if (!prompt) return;
 
-    async function loadChat(chatID) {
-        if (!chatID) {
-            chatMessages.innerHTML = "";
-            currentChatID = null;
-            document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
-            return;
-        }
+        displayMessage(prompt, "user");
+        chatInput.value = "";
+        toggleLoading(true);
 
-        try {
-            const response = await fetch(`/api/chats/${chatID}/messages`);
-            if (!response.ok) {
-                window.location.href = "/chat";
+        let chatId = activeChatId;
+
+        // STEP 1: If it's a new chat, create it first to get an ID.
+        if (!chatId) {
+            try {
+                const res = await fetch("/api/chats", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title: prompt }),
+                });
+                if (!res.ok) throw new Error(`Failed to create chat: ${res.statusText}`);
+                
+                const newChat = await res.json();
+                chatId = newChat.ID;
+                
+                window.history.pushState({ chatId }, "", `/chat?id=${chatId}`);
+                await loadHistory();
+                setActiveChat(chatId);
+
+            } catch (err) {
+                console.error(err);
+                displayMessage("Error: Could not create a new chat session.", "assistant");
+                toggleLoading(false);
                 return;
             }
-            const messages = await response.json();
-            chatMessages.innerHTML = "";
-            if (messages) {
-                // --- THIS IS THE FIX ---
-                // Handle both capitalized (msg.Content) and lowercase (msg.content) properties
-                // to make the rendering robust.
-                messages.forEach(msg => {
-                    const content = msg.Content || msg.content;
-                    const role = msg.Role || msg.role;
-                    appendMessage(content, role);
-                });
-            }
-            currentChatID = chatID;
-            document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
-            const activeItem = document.querySelector(`.history-item[data-chat-id='${chatID}']`);
-            if (activeItem) {
-                activeItem.classList.add("active");
-            }
-        } catch (error) {
-            console.error("Failed to load chat:", error);
         }
-    }
 
-    function appendMessage(content, author) {
-        const messageItem = document.createElement("li");
-        messageItem.className = `msg ${author}`;
-        const avatar = document.createElement("span");
-        avatar.className = "avatar";
-        avatar.textContent = author === "user" ? "You" : "AI";
-        const text = document.createElement("p");
-        text.textContent = content;
-        messageItem.appendChild(avatar);
-        messageItem.appendChild(text);
-        chatMessages.appendChild(messageItem);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+        // STEP 2: Start the stream now that we have a valid chat ID.
+        const aiMsgElement = displayMessage("", "assistant", true);
+        const eventSource = new EventSource(`/api/chats/${chatId}/stream?q=${encodeURIComponent(prompt)}`);
 
-    function createHistoryItemDOM(title, chatID) {
-        const wrapper = document.createElement("div");
-        wrapper.className = "history-item";
-        wrapper.setAttribute("data-chat-id", chatID);
-
-        const link = document.createElement("a");
-        link.href = `/chat?id=${chatID}`;
-        link.textContent = title;
-
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "delete-chat-btn";
-        deleteBtn.innerHTML = "&times;";
-        deleteBtn.title = "Delete chat";
-        deleteBtn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (confirm("Are you sure you want to delete this chat?")) {
-                deleteChat(chatID, wrapper);
-            }
+        eventSource.onmessage = (event) => {
+            aiMsgElement.querySelector("p").textContent += event.data;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         };
 
-        wrapper.appendChild(link);
-        wrapper.appendChild(deleteBtn);
-        historyList.prepend(wrapper);
+        eventSource.onerror = (err) => {
+            // This will now only fire on a genuine network error,
+            // not when the stream closes normally.
+            console.error("EventSource failed:", err);
+            displayMessage("A streaming error occurred. Please try again.", "assistant");
+            eventSource.close();
+            toggleLoading(false);
+        };
+
+        // ADDED: This listens for our custom "done" event from the server.
+        eventSource.addEventListener('done', () => {
+            console.log("Stream successfully completed by server.");
+            eventSource.close();
+            toggleLoading(false);
+        });
+    });
+
+    // --- Helper Functions ---
+    function toggleLoading(isLoading) {
+        chatInput.disabled = isLoading;
+        chatForm.querySelector("button").disabled = isLoading;
     }
 
-    async function deleteChat(chatID, elementToRemove) {
-        try {
-            const response = await fetch(`/api/chats/${chatID}`, { method: 'DELETE' });
-            if (response.ok) {
-                elementToRemove.remove();
-                if (currentChatID == chatID) {
-                    newChatBtn.click();
-                }
-            } else {
-                alert("Failed to delete chat.");
-            }
-        } catch (error) {
-            console.error("Failed to delete chat:", error);
+    function displayMessage(content, role, returnElement = false) {
+        const li = document.createElement("li");
+        li.className = `msg ${role}`;
+        
+        const avatar = document.createElement("span");
+        avatar.className = "avatar";
+        avatar.textContent = role === "user" ? "You" : "AI";
+        
+        const p = document.createElement("p");
+        p.textContent = content;
+        
+        li.appendChild(avatar);
+        li.appendChild(p);
+        chatMessages.appendChild(li);
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        if (returnElement) {
+            return li;
         }
     }
     
-    function setLoading(isLoading) {
-        const loadingIndicator = document.getElementById("loadingIndicator");
-        if (isLoading) {
-            chatInput.disabled = true;
-            chatForm.querySelector("button").disabled = true;
-            if (!loadingIndicator) {
-                const indicator = document.createElement("div");
-                indicator.id = "loadingIndicator";
-                indicator.className = "msg assistant";
-                indicator.innerHTML = `<span class="avatar">AI</span><p><span class="spinner"></span></p>`;
-                chatMessages.appendChild(indicator);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+    async function loadHistory() {
+        try {
+            const res = await fetch("/api/chats");
+            if (!res.ok) return;
+            const chats = await res.json();
+            historyList.innerHTML = "";
+            if (chats) {
+                chats.forEach(chat => {
+                    const div = document.createElement("div");
+                    div.className = "history-item";
+                    div.setAttribute("data-chat-id", chat.ID);
+                    div.innerHTML = `<a href="/chat?id=${chat.ID}">${chat.Title}</a><button class="delete-chat-btn" title="Delete chat">&times;</button>`;
+                    historyList.prepend(div);
+                });
+                setActiveChat(activeChatId);
             }
-        } else {
-            chatInput.disabled = false;
-            chatForm.querySelector("button").disabled = false;
-            if (loadingIndicator) {
-                loadingIndicator.remove();
+        } catch (err) {
+            console.error("Failed to load history:", err);
+        }
+    }
+    
+    async function loadMessages(chatId) {
+        if (!chatId) {
+            chatMessages.innerHTML = "";
+            activeChatId = null;
+            return;
+        }
+        try {
+            const res = await fetch(`/api/chats/${chatId}/messages`);
+            if (!res.ok) {
+                 window.location.href = "/chat";
+                 return;
             }
-            chatInput.focus();
+            const messages = await res.json();
+            chatMessages.innerHTML = "";
+            if(messages) {
+                messages.forEach(msg => displayMessage(msg.Content, msg.Role));
+            }
+            activeChatId = chatId;
+            setActiveChat(chatId);
+        } catch (err) {
+            console.error("Failed to load messages:", err);
         }
     }
 
-    chatForm.addEventListener("submit", async function (e) {
-        e.preventDefault();
-        const msg = chatInput.value.trim();
-        if (!msg) return;
-
-
-        appendMessage(msg, "user");
-        chatInput.value = "";
-        chatInput.dir = 'ltr';
-        chatInput.style.height = "auto";
-        setLoading(true);
-
-        const endpoint = currentChatID ? `/api/chats/${currentChatID}/messages` : "/api/chats";
-
-        try {
-            let bodyObj = { content: msg };
-            if (currentChatID !== null && currentChatID !== undefined) bodyObj.chat_id = currentChatID;
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(bodyObj)
-            });
-
-            setLoading(false);
-            const data = await response.json();
-            
-            if (data.reply) {
-                appendMessage(data.reply, "assistant");
-            } else if (data.error) {
-                appendMessage(data.error, "assistant");
-            }
-            
-            if (data.chat && !currentChatID) {
-                await loadHistory();
-                window.history.pushState({}, "", `/chat?id=${data.chat.ID}`);
-                loadChat(data.chat.ID);
-            }
-        } catch (err) {
-            setLoading(false);
-            appendMessage("Sorry, a server error occurred.", "assistant");
+    function setActiveChat(chatId) {
+        document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
+        if(chatId) {
+            const el = document.querySelector(`.history-item[data-chat-id='${chatId}']`);
+            if(el) el.classList.add("active");
         }
-    });
+    }
 
-    historyList.addEventListener("click", function(e) {
-        e.preventDefault();
-        const item = e.target.closest(".history-item");
-        if (item) {
-            const chatID = item.getAttribute("data-chat-id");
-            if (chatID !== currentChatID) {
-                window.history.pushState({}, "", `/chat?id=${chatID}`);
-                loadChat(chatID);
-            }
-        }
-    });
-
+    // --- Event Listeners ---
     newChatBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        if (currentChatID !== null) {
+        if (activeChatId) {
             window.history.pushState({}, "", "/chat");
-            loadChat(null);
+            loadMessages(null);
         }
     });
 
-    chatInput.addEventListener('input', () => {
-        const rtlRegex = /[\u0600-\u06FF\u0750-\u077F]/;
-        chatInput.dir = rtlRegex.test(chatInput.value) ? 'rtl' : 'ltr';
-        chatInput.style.height = "auto";
-        chatInput.style.height = (chatInput.scrollHeight) + "px";
+    historyList.addEventListener("click", async (e) => {
+        if(e.target.classList.contains("delete-chat-btn")) {
+            e.preventDefault();
+            const item = e.target.closest(".history-item");
+            const chatId = item.getAttribute("data-chat-id");
+            if(confirm("Are you sure you want to delete this chat?")) {
+                try {
+                    const res = await fetch(`/api/chats/${chatId}`, { method: "DELETE" });
+                    if(res.ok) {
+                        item.remove();
+                        if (chatId === activeChatId) newChatBtn.click();
+                    }
+                } catch(err) {
+                    console.error("Failed to delete chat", err);
+                }
+            }
+        } else if (e.target.tagName === 'A') {
+            e.preventDefault();
+            const item = e.target.closest(".history-item");
+            const chatId = item.getAttribute("data-chat-id");
+            if (chatId !== activeChatId) {
+                window.history.pushState({ chatId }, "", e.target.href);
+                loadMessages(chatId);
+            }
+        }
     });
 
-    const initialChatID = new URLSearchParams(window.location.search).get("id");
+    // --- Initial Load ---
     loadHistory().then(() => {
-        if (initialChatID) {
-            loadChat(initialChatID);
+        if (activeChatId) {
+            loadMessages(activeChatId);
         }
     });
 });
