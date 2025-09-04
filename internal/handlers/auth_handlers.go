@@ -13,8 +13,8 @@ import (
 )
 
 var (
-    usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
-    phoneRegex    = regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+    usernameRegex     = regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
+    phoneRegex        = regexp.MustCompile(`^\+?[0-9]{7,15}$`)
     passwordMinLength = 8
 )
 
@@ -28,50 +28,56 @@ func NewAuthHandler(service *services.UserService) *AuthHandler {
     return &AuthHandler{UserService: service}
 }
 
-// validateInput performs basic input validation and sanitization.
+// validateInput ensures that username, phone, and password meet basic rules.
 func validateInput(username, phone, password string) (string, string, string, string) {
     username = strings.TrimSpace(username)
     phone = strings.TrimSpace(phone)
     password = strings.TrimSpace(password)
 
     var errMsg string
-    if !usernameRegex.MatchString(username) {
+    switch {
+    case !usernameRegex.MatchString(username):
         errMsg = "Username must be 3-20 characters, alphanumeric or underscore."
-    } else if !phoneRegex.MatchString(phone) {
+    case !phoneRegex.MatchString(phone):
         errMsg = "Phone number format invalid."
-    } else if len(password) < passwordMinLength {
+    case len(password) < passwordMinLength:
         errMsg = "Password must be at least 8 characters."
     }
     return username, phone, password, errMsg
 }
 
-// Register handles user registration with enhanced validation.
+// convertToInterfaceMap transforms map[string]string into map[string]interface{}.
+// As noted on StackOverflow, Go doesn't support casting here—looping is the idiomatic way. :contentReference[oaicite:0]{index=0}
+func convertToInterfaceMap(strMap map[string]string) map[string]interface{} {
+    ifaceMap := make(map[string]interface{}, len(strMap))
+    for k, v := range strMap {
+        ifaceMap[k] = v
+    }
+    return ifaceMap
+}
+
+// Register handles new user registrations, including form validation and rendering.
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
     if err := r.ParseForm(); err != nil {
         http.Error(w, "Invalid form data", http.StatusBadRequest)
         return
     }
 
-    username := r.FormValue("username")
-    phone := r.FormValue("phone_number")
-    password := r.FormValue("password")
-
-    username, phone, password, errMsg := validateInput(username, phone, password)
+    username, phone, password, errMsg := validateInput(
+        r.FormValue("username"),
+        r.FormValue("phone_number"),
+        r.FormValue("password"),
+    )
     if errMsg != "" {
-        data := map[string]string{"Error": errMsg}
+        data := convertToInterfaceMap(map[string]string{"Error": errMsg})
         renderTemplate(w, "register.html", data)
         return
     }
 
     user := &domain.User{Username: username, PhoneNumber: phone}
-
-    // Check for brute force/rate limit here (implementation dependent)
-    // e.g., check IP-based attempts or CAPTCHA integration
-
-    _, err := h.UserService.RegisterUser(r.Context(), user, password)
-    if err != nil {
+    if _, err := h.UserService.RegisterUser(r.Context(), user, password); err != nil {
         log.Printf("Registration error: %v", err)
-        data := map[string]string{"Error": err.Error()}
+        data := convertToInterfaceMap(map[string]string{"Error": err.Error()})
         renderTemplate(w, "register.html", data)
         return
     }
@@ -79,7 +85,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
     http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// Login handles user login with simple validation.
+// Login validates user credentials, sets auth cookies, and redirects to chat.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
     if err := r.ParseForm(); err != nil {
         http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -88,19 +94,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
     username := strings.TrimSpace(r.FormValue("username"))
     password := strings.TrimSpace(r.FormValue("password"))
-
     if username == "" || password == "" {
-        data := map[string]string{"Error": "Username and password are required."}
+        data := convertToInterfaceMap(map[string]string{"Error": "Username and password are required."})
         renderTemplate(w, "login.html", data)
         return
     }
 
-    // Rate limiting or CAPTCHA can be enforced here to prevent brute force
-
     token, err := h.UserService.Login(r.Context(), username, password)
     if err != nil {
         log.Printf("Login error: %v", err)
-        data := map[string]string{"Error": "Invalid username or password."}
+        data := convertToInterfaceMap(map[string]string{"Error": "Invalid username or password."})
         renderTemplate(w, "login.html", data)
         return
     }
@@ -110,10 +113,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
         Value:    token,
         Expires:  time.Now().Add(24 * time.Hour),
         HttpOnly: true,
-        Secure:   true,               // Add Secure for HTTPS only
+        Secure:   true,
         Path:     "/",
         SameSite: http.SameSiteLaxMode,
     })
-
     http.Redirect(w, r, "/chat", http.StatusSeeOther)
 }
