@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/iyunix/go-internist/internal/domain"
 	"github.com/iyunix/go-internist/internal/repository"
+	"github.com/pinecone-io/go-pinecone/v4/pinecone"
 )
 
 type ChatService struct {
@@ -28,7 +31,7 @@ func NewChatService(
 	retrievalTopK int,
 ) *ChatService {
 	if retrievalTopK <= 0 {
-		retrievalTopK = 8 // Default value
+		retrievalTopK = 8
 	}
 	return &ChatService{
 		chatRepo:        chatRepo,
@@ -68,19 +71,16 @@ func (s *ChatService) StreamChatMessage(
 	prompt string,
 	onDelta func(token string) error,
 ) error {
-	// 1. Validate chat ownership
 	chat, err := s.chatRepo.FindByID(ctx, chatID)
 	if err != nil || chat.UserID != userID {
 		return errors.New("chat not found or unauthorized")
 	}
 
-	// 2. Save the user's message
 	userMessage := &domain.Message{ChatID: chatID, Role: "user", Content: prompt}
 	if _, err := s.messageRepo.Create(ctx, userMessage); err != nil {
 		return fmt.Errorf("failed to store user message: %w", err)
 	}
 
-	// 3. Perform RAG (Embedding + Pinecone Search)
 	embedding, err := s.aiService.CreateEmbedding(ctx, prompt)
 	if err != nil {
 		return fmt.Errorf("failed to create embedding: %w", err)
@@ -90,30 +90,11 @@ func (s *ChatService) StreamChatMessage(
 		return fmt.Errorf("failed to query pinecone: %w", err)
 	}
 
-	var contextBuilder strings.Builder
-	log.Println("--- [RAG] Retrieved Context from Pinecone ---")
-	for i, match := range matches {
-		if match != nil && match.Vector != nil && match.Vector.Metadata != nil {
-			// CORRECTED METADATA FIELD NAME
-			source := match.Vector.Metadata.Fields["source_file"].GetStringValue()
-			section := match.Vector.Metadata.Fields["section_heading"].GetStringValue()
-			takeaway := match.Vector.Metadata.Fields["key_takeaways"].GetStringValue()
-			content := match.Vector.Metadata.Fields["text"].GetStringValue()
+	// Build a normalized, stable, chunked CONTEXT to enable precise citations.
+	contextJSON := s.buildContextJSON(matches)
 
-			log.Printf("[RAG Context] Chunk %d Source: %s", i+1, source)
+	finalPrompt := s.buildFinalPrompt(contextJSON, prompt)
 
-			contextBuilder.WriteString(fmt.Sprintf("--- Context Chunk %d ---\n", i+1))
-			contextBuilder.WriteString(fmt.Sprintf("Source: %s\n", source))
-			contextBuilder.WriteString(fmt.Sprintf("Section: %s\n", section))
-			contextBuilder.WriteString(fmt.Sprintf("Key Takeaway: %s\n", takeaway))
-			contextBuilder.WriteString(fmt.Sprintf("Content:\n%s\n\n", content))
-		}
-	}
-	log.Println("-------------------------------------------")
-
-	finalPrompt := s.buildFinalPrompt(contextBuilder.String(), prompt)
-
-	// 4. Stream the AI response
 	var fullReply strings.Builder
 	streamErr := s.aiService.StreamCompletion(ctx, "jabir-400b", finalPrompt, func(token string) error {
 		fullReply.WriteString(token)
@@ -124,7 +105,7 @@ func (s *ChatService) StreamChatMessage(
 		return streamErr
 	}
 
-	// 5. Save the full AI response after the stream is complete
+	// Persist assistant reply asynchronously.
 	go func() {
 		if fullReply.Len() > 0 {
 			assistantMessage := &domain.Message{ChatID: chatID, Role: "assistant", Content: fullReply.String()}
@@ -136,29 +117,153 @@ func (s *ChatService) StreamChatMessage(
 	return nil
 }
 
-// buildFinalPrompt creates the final prompt with context for the LLM.
-func (s *ChatService) buildFinalPrompt(contextText, question string) string {
-	if strings.TrimSpace(contextText) == "" {
-		contextText = "No relevant information was found in the database."
+// buildContextJSON converts Pinecone matches into a compact JSON array text blob for the prompt.
+func (s *ChatService) buildContextJSON(matches []*pinecone.ScoredVector) string {
+	type ctxEntry struct {
+		ChunkID        string
+		SourceFile     string
+		SectionHeading string
+		KeyTakeaways   string
+		Text           string
+		Similarity     string
 	}
-	return fmt.Sprintf(`ROLE: You are an expert AI assistant named Internist.
 
-TASK:
-- Your primary task is to answer the user's QUESTION based *ONLY* on the structured information provided in the CONTEXT below.
-- Synthesize a comprehensive answer from all the provided context chunks.
-- **CRUCIAL**: After each sentence or key piece of information in your answer, you MUST provide a citation referencing the source file, like this: (Source: Cardiovascular/cardio_cad/some_article.md).
-- If the CONTEXT does not contain the information needed to answer the QUESTION, you MUST state that the answer is not available in the provided documents. Do not use your own knowledge.
+	entries := make([]ctxEntry, 0, len(matches))
+	// Sort matches by descending score for consistent ordering.
+	sort.Slice(matches, func(i, j int) bool {
+		var is, js float32
+		if matches[i] != nil {
+			is = matches[i].Score
+		}
+		if matches[j] != nil {
+			js = matches[j].Score
+		}
+		return is > js
+	})
 
-CONTEXT:
+	for i, match := range matches {
+		if match == nil || match.Vector == nil || match.Vector.Metadata == nil {
+			continue
+		}
+		md := match.Vector.Metadata.GetFields()
+		source := ""
+		section := ""
+		takeaway := ""
+		content := ""
+		if f, ok := md["source_file"]; ok {
+			source = f.GetStringValue()
+		}
+		if f, ok := md["section_heading"]; ok {
+			section = f.GetStringValue()
+		}
+		if f, ok := md["key_takeaways"]; ok {
+			takeaway = f.GetStringValue()
+		}
+		if f, ok := md["text"]; ok {
+			content = f.GetStringValue()
+		}
+
+		// Use vector ID as chunk_id (aligns with working Pinecone logic).
+		chunkID := match.Vector.Id
+		if strings.TrimSpace(chunkID) == "" {
+			chunkID = fmt.Sprintf("C%03d", i+1)
+		}
+
+		// Convert similarity score to string.
+		sim := strconv.FormatFloat(float64(match.Score), 'f', 6, 64)
+
+		log.Printf("[RAG Context] Chunk %d Source: %s Id: %s", i+1, source, chunkID)
+
+		entries = append(entries, ctxEntry{
+			ChunkID:        chunkID,
+			SourceFile:     source,
+			SectionHeading: section,
+			KeyTakeaways:   takeaway,
+			Text:           content,
+			Similarity:     sim,
+		})
+	}
+
+	// Serialize into a compact JSON-like text for the prompt.
+	var b strings.Builder
+	b.WriteString("[\n")
+	for i, e := range entries {
+		if i > 0 {
+			b.WriteString(",\n")
+		}
+		esc := func(s string) string {
+			s = strings.ReplaceAll(s, `\`, `\\`)
+			s = strings.ReplaceAll(s, `"`, `\"`)
+			s = strings.ReplaceAll(s, "\n", `\n`)
+			return s
+		}
+		fmt.Fprintf(&b, `  {"chunk_id":"%s","source_file":"%s","section_heading":"%s","key_takeaways":"%s","text":"%s","similarity":%s}`,
+			esc(e.ChunkID), esc(e.SourceFile), esc(e.SectionHeading), esc(e.KeyTakeaways), esc(e.Text), e.Similarity)
+	}
+	b.WriteString("\n]")
+	return b.String()
+}
+
+// buildFinalPrompt creates a strict instruction for the model to return JSON in a fixed schema.
+func (s *ChatService) buildFinalPrompt(contextJSON, question string) string {
+	if strings.TrimSpace(contextJSON) == "" {
+		contextJSON = "[]"
+	}
+	return fmt.Sprintf(`SYSTEM:
+You are "Internist", an expert medical assistant. You MUST return STRICT JSON ONLY. 
+- Begin with '{' and end with '}' as the very first and last characters. 
+- Do NOT include any text, explanations, code fences, or commentary outside the JSON.
+- Do NOT break inside JSON keys or values during streaming. 
+- Do NOT add extra fields or omit required fields. 
+- Do NOT use null. Use empty arrays [] or empty strings "" if needed.
+- No trailing commas in any array or object.
+
+YOUR RESPONSE MUST EXACTLY MATCH THIS SCHEMA:
+{
+  "items": [
+    {
+      "title": "string",
+      "answer_md": "string",
+      "additional_md": ["string"],
+      "citations": [
+        {
+          "chunk_id": "string",
+          "source_file": "string",
+          "section_heading": "string",
+          "quote": "string",
+          "similarity": "string"
+        }
+      ],
+      "tags": ["string"]
+    }
+  ],
+  "sources": [
+    { "source_file": "string", "display_name": "string", "citation_count": 0 }
+  ],
+  "meta": {
+    "no_answer_reason": "string|optional",
+    "notes": "string|optional"
+  }
+}
+
+POLICY:
+- Use ONLY the provided CONTEXT. Do NOT invent or use outside knowledge.
+- If CONTEXT is insufficient, return: "items": [] and set "meta.no_answer_reason" with a short explanation.
+- For every factual claim in answer_md, include at least one citation. When synthesizing from multiple chunks, include multiple citations.
+- Copy chunk_id and source_file EXACTLY from CONTEXT. Do NOT renumber or rename them.
+- Quotes in citations must be short (5–30 words) and directly from the 'text' or 'key_takeaways' in CONTEXT.
+- Tags should be relevant keywords (e.g., drug name, topic).
+
+CONTEXT (JSON array of chunks):
 %s
----
 
 QUESTION:
 %s
-`, contextText, question)
+`, contextJSON, question)
 }
 
-// --- Other existing functions ---
+
+// --- THIS FUNCTION SIGNATURE IS NOW CORRECTED ---
 func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.Chat, error) {
 	return s.chatRepo.FindByUserID(ctx, userID)
 }

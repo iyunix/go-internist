@@ -32,8 +32,8 @@ func NewPineconeService(apiKey, indexHost, namespace string) (*PineconeService, 
 		client:     pc,
 		indexHost:  indexHost,
 		namespace:  namespace,
-		// THE ONLY CHANGE IS HERE
-		timeout:    20 * time.Second, // Increased timeout from 8s to 20s
+		// Increased timeout to accommodate larger metadata payloads and index latency variability.
+		timeout:    20 * time.Second,
 		maxRetries: 3,
 	}, nil
 }
@@ -49,7 +49,6 @@ func (s *PineconeService) indexConn() (*pinecone.IndexConnection, error) {
 // retryWithTimeout runs a function with retries and a per-attempt timeout.
 func (s *PineconeService) retryWithTimeout(call func(ctx context.Context) error) error {
 	for attempt := 1; attempt <= s.maxRetries; attempt++ {
-		// We use s.timeout which is now 20 seconds.
 		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 		err := call(ctx)
 		cancel() // always call cancel to free resources
@@ -65,7 +64,7 @@ func (s *PineconeService) retryWithTimeout(call func(ctx context.Context) error)
 }
 
 func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]any) error {
-    // This function remains unchanged
+	// Ensure metadata contains flat fields like source_file, section_heading, key_takeaways, text, and optionally a separate chunk_id if desired.
 	return s.retryWithTimeout(func(ctx context.Context) error {
 		idx, err := s.indexConn()
 		if err != nil {
@@ -88,8 +87,8 @@ func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []
 }
 
 // QuerySimilar returns the top K most similar vectors to the given embedding.
+// Matches include Id, Score (float32), and Metadata used downstream for citations.
 func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]*pinecone.ScoredVector, error) {
-    // This function remains unchanged
 	var result []*pinecone.ScoredVector
 	err := s.retryWithTimeout(func(ctx context.Context) error {
 		idx, err := s.indexConn()

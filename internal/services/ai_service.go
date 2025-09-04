@@ -12,6 +12,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// AIService provides methods for LLM chat completions and embeddings.
 type AIService struct {
 	embeddingClient    *openai.Client
 	llmClient          *openai.Client
@@ -20,15 +21,18 @@ type AIService struct {
 	maxRetries         int
 }
 
+// NewAIService initializes AIService with separate clients for embeddings and LLM.
 func NewAIService(embeddingKey, llmKey, embeddingBaseURL, llmBaseURL, embeddingModelName string) *AIService {
 	embeddingConfig := openai.DefaultConfig(embeddingKey)
 	if embeddingBaseURL != "" {
 		embeddingConfig.BaseURL = embeddingBaseURL
 	}
+
 	llmConfig := openai.DefaultConfig(llmKey)
 	if llmBaseURL != "" {
 		llmConfig.BaseURL = llmBaseURL
 	}
+
 	return &AIService{
 		embeddingClient:    openai.NewClientWithConfig(embeddingConfig),
 		llmClient:          openai.NewClientWithConfig(llmConfig),
@@ -38,32 +42,45 @@ func NewAIService(embeddingKey, llmKey, embeddingBaseURL, llmBaseURL, embeddingM
 	}
 }
 
-// THIS IS THE FUNCTION THAT WAS MISSING
-// GetCompletion returns a non-streamed reply from the chat completion API.
+// systemJSONGuard enforces strict JSON output from the model.
+func systemJSONGuard() string {
+	return "You must output STRICT JSON only that begins with '{' and ends with '}', no code fences, no extra text, and complete each key-value pair before moving on. No trailing commas. If you cannot comply, return an empty object {}."
+}
+
+// GetCompletion returns a non-streamed chat completion from the LLM.
 func (s *AIService) GetCompletion(ctx context.Context, model, prompt string) (string, error) {
 	var reply string
 	err := s.retryWithTimeout(func(ctx context.Context) error {
 		req := openai.ChatCompletionRequest{
 			Model: model,
 			Messages: []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleSystem, Content: systemJSONGuard()},
 				{Role: openai.ChatMessageRoleUser, Content: prompt},
 			},
+			Temperature: 0.1,
+			TopP:        0.9,
+			ResponseFormat: &openai.ChatCompletionResponseFormat{
+				Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+			},
 		}
+
 		resp, err := s.llmClient.CreateChatCompletion(ctx, req)
 		if err != nil {
-			return err
+			return fmt.Errorf("CreateChatCompletion error: %w", err)
 		}
+
 		if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
 			return errors.New("language model returned empty reply")
 		}
+
 		reply = resp.Choices[0].Message.Content
 		return nil
 	})
+
 	return reply, err
 }
 
-// --- The rest of your file is unchanged ---
-
+// CreateEmbedding generates an embedding vector for the given text.
 func (s *AIService) CreateEmbedding(ctx context.Context, text string) ([]float32, error) {
 	var embedding []float32
 	err := s.retryWithTimeout(func(ctx context.Context) error {
@@ -71,27 +88,39 @@ func (s *AIService) CreateEmbedding(ctx context.Context, text string) ([]float32
 			Input: []string{text},
 			Model: openai.EmbeddingModel(s.embeddingModelName),
 		}
+
 		resp, err := s.embeddingClient.CreateEmbeddings(ctx, req)
 		if err != nil {
-			return err
+			return fmt.Errorf("CreateEmbeddings error: %w", err)
 		}
+
 		if len(resp.Data) == 0 || len(resp.Data[0].Embedding) == 0 {
 			return errors.New("embedding API returned empty response")
 		}
+
 		embedding = resp.Data[0].Embedding
 		return nil
 	})
+
 	return embedding, err
 }
 
+// StreamCompletion streams the LLM's response in chunks, calling onDelta for each chunk.
 func (s *AIService) StreamCompletion(ctx context.Context, model, prompt string, onDelta func(string) error) error {
 	req := openai.ChatCompletionRequest{
-		Model:    model,
-		Stream:   true,
+		Model:  model,
+		Stream: true,
 		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: systemJSONGuard()},
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},
+		Temperature: 0.1,
+		TopP:        0.9,
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+		},
 	}
+
 	stream, err := s.llmClient.CreateChatCompletionStream(ctx, req)
 	if err != nil {
 		var apiErr *openai.APIError
@@ -110,6 +139,7 @@ func (s *AIService) StreamCompletion(ctx context.Context, model, prompt string, 
 		if err != nil {
 			return fmt.Errorf("stream receive error: %w", err)
 		}
+
 		for _, choice := range resp.Choices {
 			if delta := choice.Delta.Content; delta != "" && onDelta != nil {
 				if cbErr := onDelta(delta); cbErr != nil {
@@ -120,21 +150,24 @@ func (s *AIService) StreamCompletion(ctx context.Context, model, prompt string, 
 	}
 }
 
+// retryWithTimeout retries a function multiple times with a timeout for each attempt.
 func (s *AIService) retryWithTimeout(call func(ctx context.Context) error) error {
 	var lastErr error
 	for attempt := 1; attempt <= s.maxRetries; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 		err := call(ctx)
 		cancel()
+
 		if err == nil {
 			return nil
 		}
+
 		lastErr = err
 		log.Printf("[AIService] Retry %d/%d failed: %v", attempt, s.maxRetries, err)
+
 		if attempt < s.maxRetries {
 			time.Sleep(time.Duration(attempt) * time.Second)
 		}
 	}
 	return lastErr
 }
-
