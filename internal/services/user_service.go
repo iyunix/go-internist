@@ -11,6 +11,7 @@ import (
 
     "golang.org/x/crypto/bcrypt"
 
+    "github.com/iyunix/go-internist/internal/auth"
     "github.com/iyunix/go-internist/internal/domain"
     "github.com/iyunix/go-internist/internal/repository"
 )

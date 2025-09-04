@@ -7,6 +7,8 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
+	github.com/pinecone-io/go-pinecone v1.1.1
+	github.com/sashabaranov/go-openai v1.41.1
 	golang.org/x/crypto v0.41.0
 	gorm.io/gorm v1.30.2
 )
@@ -25,7 +27,6 @@ require (
 	github.com/pinecone-io/go-pinecone/v4 v4.1.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/sashabaranov/go-openai v1.41.1 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/net v0.42.0 // indirect
