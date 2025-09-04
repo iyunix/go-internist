@@ -1,4 +1,3 @@
-// File: internal/services/pinecone_service.go
 package services
 
 import (
@@ -6,22 +5,22 @@ import (
     "errors"
     "log"
     "time"
+
     "github.com/pinecone-io/go-pinecone/v4/pinecone"
 )
 
 type PineconeService struct {
-    client     *pinecone.Client
-    indexName  string
-    namespace  string
-    timeout    time.Duration
+    client    *pinecone.Client
+    indexName string
+    namespace string
+    timeout   time.Duration
     maxRetries int
 }
 
-// Modern NewPineconeService with error handling for client construction
-func NewPineconeService(apiKey, environment, indexName, namespace string) (*PineconeService, error) {
+// NewPineconeService constructs client with ApiKey only (no Environment field)
+func NewPineconeService(apiKey, indexName, namespace string) (*PineconeService, error) {
     client, err := pinecone.NewClient(pinecone.NewClientParams{
-        ApiKey:      apiKey,
-        Environment: environment,
+        ApiKey: apiKey,
     })
     if err != nil {
         return nil, err
@@ -49,34 +48,33 @@ func (s *PineconeService) retryWithTimeout(call func(ctx context.Context) error)
     return errors.New("pinecone: operation failed after retries")
 }
 
-// UpsertVector upserts a vector embedding
-func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]interface{}) error {
+// UpsertVector upserts a vector embedding using the client’s Index method (Index().Vectors.Upsert)
+func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]string) error {
     return s.retryWithTimeout(func(ctx context.Context) error {
-        upsertReq := &pinecone.UpsertRequest{
-            Vectors: []*pinecone.Vector{
-                {
-                    Id:       id,
-                    Values:   values,
-                    Metadata: pinecone.NewMetadata(metadata),
-                },
+        vectors := []pinecone.Vector{
+            {
+                Id:       id,
+                Values:   values,
+                Metadata: metadata,
             },
-            Namespace: s.namespace,
         }
-        _, err := s.client.Upsert(ctx, s.indexName, upsertReq)
+        _, err := s.client.Index(s.indexName).Vectors.Upsert(ctx, pinecone.VectorsUpsertRequest{
+            Vectors:   vectors,
+            Namespace: s.namespace,
+        })
         return err
     })
 }
 
-// QuerySimilar queries for similar documents
-func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]*pinecone.Match, error) {
-    var result []*pinecone.Match
+// QuerySimilar queries similar vectors
+func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]pinecone.Match, error) {
+    var result []pinecone.Match
     err := s.retryWithTimeout(func(ctx context.Context) error {
-        queryReq := &pinecone.QueryRequest{
-            Namespace: s.namespace,
-            TopK:      uint32(topK),
+        resp, err := s.client.Index(s.indexName).Query(ctx, pinecone.QueryRequest{
             Vector:    embedding,
-        }
-        resp, err := s.client.Query(ctx, s.indexName, queryReq)
+            TopK:      uint32(topK),
+            Namespace: s.namespace,
+        })
         if err != nil {
             return err
         }
