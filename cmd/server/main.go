@@ -1,115 +1,142 @@
+// File: cmd/server/main.go
 package main
 
 import (
-	"context"
-	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+    "context"
+    "log"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	"github.com/glebarez/sqlite"
-	"github.com/gorilla/mux"
-	"github.com/iyunix/go-internist/internal/config"
-	"github.com/iyunix/go-internist/internal/domain"
-	"github.com/iyunix/go-internist/internal/handlers"
-	"github.com/iyunix/go-internist/internal/middleware"
-	"github.com/iyunix/go-internist/internal/repository"
-	"github.com/iyunix/go-internist/internal/services"
-	"gorm.io/gorm"
+    "github.com/glebarez/sqlite"
+    "github.com/gorilla/mux"
+
+    "github.com/iyunix/go-internist/internal/config"
+    "github.com/iyunix/go-internist/internal/domain"
+    "github.com/iyunix/go-internist/internal/handlers"
+    "github.com/iyunix/go-internist/internal/middleware"
+    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/services"
+
+    "gorm.io/gorm"
 )
 
 func main() {
-	cfg := config.Load()
+    cfg := config.Load()
 
-	// --- Database Setup ---
-	db, err := gorm.Open(sqlite.Open("notebook.db"), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("DB Error: %v", err)
-	}
-	if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
-		log.Fatalf("DB Migration Error: %v", err)
-	}
+    // --- Database Setup ---
+    db, err := gorm.Open(sqlite.Open("notebook.db"), &gorm.Config{})
+    if err != nil {
+        log.Fatalf("DB Error: %v", err)
+    }
+    if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
+        log.Fatalf("DB Migration Error: %v", err)
+    }
 
-	// --- Initialize All Layers ---
-	userRepo := repository.NewGormUserRepository(db)
-	chatRepo := repository.NewChatRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
+    // --- Initialize Repositories ---
+    userRepo := repository.NewGormUserRepository(db)
+    chatRepo := repository.NewChatRepository(db)
+    messageRepo := repository.NewMessageRepository(db)
 
-	// --- UPDATE THIS BLOCK TO USE JABIR ---
-	// Initialize AIService to use Jabir as the LLM.
-	// This assumes your NewAIService function was updated as per our previous discussion.
-	aiService := services.NewAIService(
-		cfg.AvalaiAPIKeyEmbedding,            // Key for embeddings
-		cfg.JabirAPIKey,                      // Key for the new LLM
-		"https://api.avalai.ir/v1",           // Base URL for embeddings
-		"https://openai.jabirproject.org/v1", // Base URL for Jabir LLM
-	)
+    // --- AI Services (Embeddings + Jabir LLM) ---
+    aiService := services.NewAIService(
+        cfg.AvalaiAPIKeyEmbedding,            // embeddings API key
+        cfg.JabirAPIKey,                      // Jabir LLM API key
+        "https://api.avalai.ir/v1",           // embeddings base URL
+        "https://openai.jabirproject.org/v1", // Jabir LLM base URL
+    )
 
-	userService := services.NewUserService(userRepo, cfg.JWTSecretKey)
-	chatService := services.NewChatService(chatRepo, messageRepo, aiService)
+    // --- Pinecone (Retrieval) ---
+    pineconeService, err := services.NewPineconeService(
+        cfg.PineconeAPIKey,
+        cfg.PineconeIndexHost, // full host copied from Pinecone Console
+        cfg.PineconeNamespace, // namespace (can be empty for default)
+    )
+    if err != nil {
+        log.Fatalf("Failed to initialize Pinecone service: %v", err)
+    }
 
-	authHandler := handlers.NewAuthHandler(userService)
-	chatHandler := handlers.NewChatHandler(userService, chatService)
-	pageHandler := handlers.NewPageHandler()
+    // --- Domain Services ---
+    userService := services.NewUserService(userRepo, cfg.JWTSecretKey)
+    // Updated to inject pineconeService for RAG
+    chatService := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService)
 
-	authMiddleware := middleware.NewJWTMiddleware(cfg.JWTSecretKey)
+    // --- HTTP Handlers ---
+    authHandler := handlers.NewAuthHandler(userService)
+    chatHandler := handlers.NewChatHandler(userService, chatService)
+    pageHandler := handlers.NewPageHandler()
 
-	r := mux.NewRouter()
-	r.Use(middleware.RecoverPanic)
-	r.Use(middleware.LoggingMiddleware)
-	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}).Methods("GET")
+    // --- Middleware (JWT) ---
+    authMiddleware := middleware.NewJWTMiddleware(cfg.JWTSecretKey)
 
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+    // --- Router & Middlewares ---
+    r := mux.NewRouter()                  // Gorilla Mux router
+    r.Use(middleware.RecoverPanic)        // recover first
+    r.Use(middleware.LoggingMiddleware)   // then request logging
 
-	r.HandleFunc("/", pageHandler.ShowLoginPage).Methods("GET")
-	r.HandleFunc("/login", pageHandler.ShowLoginPage).Methods("GET")
-	r.HandleFunc("/register", pageHandler.ShowRegisterPage).Methods("GET")
-	r.HandleFunc("/login", authHandler.Login).Methods("POST")
-	r.HandleFunc("/register", authHandler.Register).Methods("POST")
+    // Health check
+    r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        _, _ = w.Write([]byte("OK"))
+    }).Methods("GET")
 
-	protected := r.PathPrefix("/").Subrouter()
-	protected.Use(authMiddleware)
+    // Static files
+    r.PathPrefix("/static/").
+        Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
-	protected.HandleFunc("/chat", pageHandler.ShowChatPage).Methods("GET")
+    // Public pages
+    r.HandleFunc("/", pageHandler.ShowLoginPage).Methods("GET")
+    r.HandleFunc("/login", pageHandler.ShowLoginPage).Methods("GET")
+    r.HandleFunc("/register", pageHandler.ShowRegisterPage).Methods("GET")
+    r.HandleFunc("/login", authHandler.Login).Methods("POST")
+    r.HandleFunc("/register", authHandler.Register).Methods("POST")
 
-	api := protected.PathPrefix("/api").Subrouter()
-	api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
-	api.HandleFunc("/chats", chatHandler.HandleChatMessage).Methods("POST")
-	api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
-	api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.HandleChatMessage).Methods("POST")
-	api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
+    // Protected area
+    protected := r.PathPrefix("/").Subrouter()
+    protected.Use(authMiddleware)
 
-	srv := &http.Server{
-		Addr:         ":" + cfg.ServerPort,
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+    // Protected pages
+    protected.HandleFunc("/chat", pageHandler.ShowChatPage).Methods("GET")
 
-	go func() {
-		log.Printf("Server is starting on port %s...", cfg.ServerPort)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("ListenAndServe error: %v", err)
-		}
-	}()
+    // Protected API
+    api := protected.PathPrefix("/api").Subrouter()
+    api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
+    api.HandleFunc("/chats", chatHandler.HandleChatMessage).Methods("POST")
+    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
+    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.HandleChatMessage).Methods("POST")
+    api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+    // --- HTTP Server ---
+    srv := &http.Server{
+        Addr:         ":" + cfg.ServerPort,
+        Handler:      r,
+        ReadTimeout:  15 * time.Second,
+        WriteTimeout: 15 * time.Second,
+        IdleTimeout:  60 * time.Second,
+    }
 
-	log.Println("Shutting down server...")
+    // Start server
+    go func() {
+        log.Printf("Server is starting on port %s...", cfg.ServerPort)
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatalf("ListenAndServe error: %v", err)
+        }
+    }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server Shutdown Failed:%+v", err)
-	}
+    // Graceful shutdown
+    stop := make(chan os.Signal, 1)
+    signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+    <-stop
 
-	log.Println("Server stopped gracefully")
+    log.Println("Shutting down server...")
+
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+    if err := srv.Shutdown(ctx); err != nil {
+        log.Fatalf("Server Shutdown Failed: %+v", err)
+    }
+
+    log.Println("Server stopped gracefully")
 }
