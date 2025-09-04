@@ -13,25 +13,28 @@ import (
 type AIService struct {
 	embeddingClient *openai.Client
 	llmClient       *openai.Client
-	timeout         time.Duration // New: default API timeout duration
-	maxRetries      int           // New: maximum retry attempts
+	timeout         time.Duration
+	maxRetries      int
 }
 
-// NewAIService creates clients for both embedding and chat completion.
-// Adds production-ready settings: API timeout, retry count.
-func NewAIService(embeddingKey, llmKey string) *AIService {
+// NewAIService is now more flexible. It accepts custom base URLs for both services.
+// If a baseURL is an empty string, it will use the OpenAI default.
+func NewAIService(embeddingKey, llmKey, embeddingBaseURL, llmBaseURL string) *AIService {
 	embeddingConfig := openai.DefaultConfig(embeddingKey)
-	embeddingConfig.BaseURL = "https://api.avalai.ir/v1"
+	if embeddingBaseURL != "" {
+		embeddingConfig.BaseURL = embeddingBaseURL
+	}
 
 	llmConfig := openai.DefaultConfig(llmKey)
-	llmConfig.BaseURL = "https://api.avalai.ir/v1"
+	if llmBaseURL != "" {
+		llmConfig.BaseURL = llmBaseURL
+	}
 
 	return &AIService{
 		embeddingClient: openai.NewClientWithConfig(embeddingConfig),
 		llmClient:       openai.NewClientWithConfig(llmConfig),
-		// --- THE ONLY CHANGE IS HERE ---
-		timeout:    60 * time.Second, // Increased timeout to 60 seconds for slow AI responses
-		maxRetries: 3,                // reasonable retry attempts
+		timeout:         60 * time.Second,
+		maxRetries:      3,
 	}
 }
 
@@ -74,11 +77,12 @@ func (s *AIService) CreateEmbedding(ctx context.Context, text string) ([]float32
 }
 
 // GetCompletion generates a chat response with retries and timeout.
-func (s *AIService) GetCompletion(ctx context.Context, prompt string) (string, error) {
+// THIS FUNCTION IS NOW UPDATED
+func (s *AIService) GetCompletion(ctx context.Context, model, prompt string) (string, error) {
 	var reply string
 	err := s.retryWithTimeout(func(ctx context.Context) error {
 		req := openai.ChatCompletionRequest{
-			Model: "gpt-5-nano",
+			Model: model, // Model is now a parameter
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
