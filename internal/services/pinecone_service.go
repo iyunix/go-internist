@@ -6,7 +6,7 @@ import (
     "errors"
     "log"
     "time"
-    "github.com/pinecone-io/pinecone-go-sdk/pinecone"
+    "github.com/pinecone-io/go-pinecone/v4/pinecone"
 )
 
 type PineconeService struct {
