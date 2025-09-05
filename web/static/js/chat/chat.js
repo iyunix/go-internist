@@ -106,16 +106,36 @@ class ChatApp {
     this.streamResponse(chatId, prompt);
   }
 
-  // FIXED: Uses new ChatStreamRenderer
+  // FIXED streamResponse method in chat.js
   streamResponse(chatId, prompt) {
-    // Create empty assistant message first
+    // Create empty assistant message with skeleton
     this.ui.displayMessage("", "assistant");
     
-    // Create stream renderer that updates this message
+    // Show skeleton status updates
+    this.ui.updateSkeletonStatus('searching', 'Searching knowledge base...');
+    
+    // Simulate processing stages for better UX
+    setTimeout(() => {
+      if (this.ui.currentSkeletonLoader) {
+        this.ui.updateSkeletonStatus('processing', 'Processing search results...');
+      }
+    }, 800);
+    
+    setTimeout(() => {
+      if (this.ui.currentSkeletonLoader) {
+        this.ui.updateSkeletonStatus('thinking', 'AI is thinking...');
+      }
+    }, 1600);
+
+    // Create stream renderer
     const streamRenderer = new ChatStreamRenderer(this.ui);
     const eventSource = this.api.createStream(chatId, prompt);
 
     eventSource.onmessage = (evt) => {
+      // Remove skeleton on first data chunk
+      if (this.ui.currentSkeletonLoader) {
+        this.ui.replaceSkeletonWithContent();
+      }
       streamRenderer.appendChunk(evt.data);
     };
 

@@ -1,0 +1,38 @@
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+@media (min-width: 768px) {
+  .sidebar {
+    display: flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .messages {
+    padding: var(--spacing-lg);
+  }
+  
+  .chat-header-main {
+    padding: var(--spacing-lg);
+  }
+  
+  .input-form-container {
+    padding: var(--spacing-lg);
+  }
+  
+  .msg {
+    max-width: 95%;
+  }
+}
+
+@media (max-width: 480px) {
+  .messages {
+    padding: var(--spacing-md);
+    gap: var(--spacing-lg);
+  }
+  
+  .msg {
+    max-width: 100%;
+  }
+}

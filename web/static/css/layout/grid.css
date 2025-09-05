@@ -1,0 +1,17 @@
+/* ==========================================================================
+   Main Layout Grid
+   ========================================================================== */
+
+.chat-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-main);
+  min-width: 0;
+}

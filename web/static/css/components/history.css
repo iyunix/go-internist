@@ -1,0 +1,83 @@
+/* ==========================================================================
+   Chat History Component
+   ========================================================================== */
+
+.chat-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.history-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-md);
+  padding: 0 var(--spacing-sm);
+}
+
+.history-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+  position: relative;
+}
+
+.history-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.history-item.active {
+  background-color: var(--primary);
+}
+
+.history-item.active a {
+  color: white;
+  font-weight: 500;
+}
+
+.history-item a {
+  flex: 1;
+  display: block;
+  padding: var(--spacing-md);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delete-chat-btn {
+  display: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: var(--transition);
+  margin-right: var(--spacing-sm);
+}
+
+.history-item:hover .delete-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-chat-btn:hover {
+  background-color: #ef4444;
+  color: white;
+}

@@ -1,0 +1,21 @@
+/* ==========================================================================
+   Dark Theme Variables
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-main: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-sidebar: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+    --border: #334155;
+    --border-light: #475569;
+    --assistant-bg: #1e293b;
+    --assistant-text: #f8fafc;
+    --code-bg: #0f172a;
+    --code-border: #334155;
+    --inline-code-bg: #334155;
+  }
+}
