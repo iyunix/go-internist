@@ -1,11 +1,6 @@
 // File: web/static/js/markdown_renderer.js
 // MarkdownRenderer: Parse Markdown to HTML and sanitize it before inserting into the DOM.
-// Requires global `marked` (Markdown parser) and `DOMPurify` (HTML sanitizer). [Docs]
-// - marked.parse(md) -> HTML string [41]
-// - DOMPurify.sanitize(html) -> safe HTML string [42]
-//
-// [41] marked: https://marked.js.org
-// [42] DOMPurify: https://github.com/cure53/DOMPurify
+// Requires global `marked` (Markdown parser) and `DOMPurify` (HTML sanitizer).
 
 (function (global) {
   'use strict';
@@ -42,61 +37,118 @@
     targetEl.innerHTML = safe;
   }
 
-  // Streaming helper: accumulates chunks and re-renders efficiently
+  // Streaming helper: accumulate chunks and render progressively
   function createStreamRenderer(targetEl, options) {
     assertDeps();
+    
     let buffer = '';
     let rafId = null;
+    let timeoutId = null;
+    const debounceMs = (options && options.debounceMs) || 100;
+    let isDestroyed = false;
 
-    // Optional throttled render using requestAnimationFrame
-    function scheduleRender() {
-      if (rafId !== null) return;
-      rafId = global.requestAnimationFrame(function () {
-        rafId = null;
+    function doRender() {
+      if (isDestroyed) return;
+      
+      rafId = null;
+      
+      try {
         renderMarkdownTo(targetEl, buffer);
-        // Keep scrolled to bottom if container is in a scrollable area
-        try {
-          const scroller = targetEl.closest('.messages') || targetEl.parentElement || document.documentElement;
+        
+        // Auto-scroll to bottom
+        const scroller = targetEl.closest('.messages') || targetEl.parentElement;
+        if (scroller) {
           scroller.scrollTop = scroller.scrollHeight;
-        } catch (_) { /* no-op */ }
-      });
+        }
+      } catch (err) {
+        console.warn('MarkdownRenderer render error:', err);
+        // Fallback to plain text on render error
+        targetEl.textContent = buffer;
+      }
+    }
+
+    function scheduleRender(immediate = false) {
+      if (isDestroyed) return;
+      
+      // Clear any existing scheduled renders
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
+      if (immediate) {
+        rafId = requestAnimationFrame(doRender);
+      } else {
+        // Debounced render for smoother streaming
+        timeoutId = setTimeout(() => {
+          timeoutId = null;
+          rafId = requestAnimationFrame(doRender);
+        }, debounceMs);
+      }
     }
 
     return {
-      // Append a streamed chunk of Markdown text
       append(chunk) {
-        if (!chunk) return;
-        buffer += String(chunk);
-        scheduleRender();
+        if (isDestroyed || !chunk) return;
+        
+        chunk = String(chunk);
+        buffer += chunk;
+        
+        // Render immediately on newlines, otherwise debounce
+        const hasNewline = chunk.includes('\n');
+        scheduleRender(hasNewline);
       },
-      // Replace the entire content with a new Markdown string
+      
       set(markdown) {
+        if (isDestroyed) return;
+        
         buffer = String(markdown || '');
-        scheduleRender();
+        scheduleRender(true);
       },
-      // Clear all content
+      
       clear() {
+        if (isDestroyed) return;
+        
         buffer = '';
-        scheduleRender();
+        scheduleRender(true);
       },
-      // Get current buffered Markdown (not HTML)
+      
       get() {
         return buffer;
       },
-      // Force an immediate render (synchronously)
+      
       flush() {
+        if (isDestroyed) return;
+        
+        // Cancel any pending renders and do immediate final render
         if (rafId !== null) {
-          global.cancelAnimationFrame(rafId);
+          cancelAnimationFrame(rafId);
           rafId = null;
         }
-        renderMarkdownTo(targetEl, buffer);
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
+        doRender();
       },
-      // Destroy references
+      
       destroy() {
+        isDestroyed = true;
+        
         if (rafId !== null) {
-          global.cancelAnimationFrame(rafId);
+          cancelAnimationFrame(rafId);
           rafId = null;
         }
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
         buffer = '';
       }
     };
@@ -108,10 +160,12 @@
     configure(markedOptions) {
       initMarked(markedOptions);
     },
+    
     // One-shot render: convert Markdown to sanitized HTML in the given element
     render(targetEl, markdown) {
       renderMarkdownTo(targetEl, markdown);
     },
+    
     // Create a streaming renderer bound to an element
     createStream(targetEl, options) {
       return createStreamRenderer(targetEl, options);

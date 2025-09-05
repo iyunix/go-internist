@@ -1,7 +1,11 @@
 {{template "layout.html" .}}
 
 {{define "styles"}}
-    <link rel="stylesheet" href="/static/css/chat.min.css">
+    <link rel="stylesheet" href="/static/css/chat.css">
+{{end}}
+
+{{define "scripts"}}
+    <script type="module" src="/static/js/chat/chat.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -31,7 +35,9 @@
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <textarea id="chatInput" placeholder="Ask me anything…" rows="1"></textarea>
                 <button type="submit" aria-label="Send">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                        <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
+                    </svg>
                 </button>
             </form>
             <small class="disclaimer">

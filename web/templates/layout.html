@@ -12,12 +12,14 @@
 </head>
 <body>
     {{block "content" .}}{{end}}
-    <!-- Load BEFORE markdown_renderer.js and chat.js -->
-    <script src="/static/js/logger.js" defer></script>
-    <script src="/static/js/vendor/marked.umd.js" defer></script>
-    <script src="/static/js/vendor/purify.min.js" defer></script>
-    <script src="/static/js/markdown_renderer.js" defer></script>
-    <script src="/static/js/chat.js" defer></script>
-</body>
+    
+    <!-- Load dependencies BEFORE modules -->
+    <script src="/static/js/logger.js"></script>
+    <script src="/static/js/vendor/marked.umd.js"></script>
+    <script src="/static/js/vendor/purify.min.js"></script>
+    <script src="/static/js/markdown_renderer.js"></script>
+    
+    <!-- Page-specific module scripts -->
+    {{block "scripts" .}}{{end}}
 </body>
 </html>
