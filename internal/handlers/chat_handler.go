@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/iyunix/go-internist/internal/middleware"
@@ -48,9 +49,10 @@ func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(chat)
+	_ = json.NewEncoder(w).Encode(chat)
 }
 
 // StreamChatSSE handles the streaming RAG process for an EXISTING chat.
@@ -83,12 +85,31 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // prevent proxy buffering
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported on this connection", http.StatusInternalServerError)
 		return
 	}
+
+	// Heartbeat ticker
+	done := r.Context().Done()
+	hb := time.NewTicker(15 * time.Second)
+	defer hb.Stop()
+
+	// Start a goroutine for heartbeats
+	go func() {
+		for {
+		select {
+		case <-hb.C:
+			fmt.Fprint(w, ": ping\n\n")
+			flusher.Flush()
+		case <-done:
+			return
+		}
+		}
+	}()
 
 	onDelta := func(token string) error {
 		if _, err := fmt.Fprintf(w, "data: %s\n\n", token); err != nil {
@@ -103,13 +124,13 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// After the stream is finished, send a special "done" event.
 	fmt.Fprintf(w, "event: done\ndata: [END]\n\n")
 	flusher.Flush()
 	log.Printf("[ChatHandler] Gracefully closed stream for user %d", userID)
 }
 
 // --- Other existing handlers ---
+
 func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(middleware.UserIDKey("userID")).(uint)
 	if !ok {
@@ -121,8 +142,9 @@ func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get user chats", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(chats)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(chats)
 }
 
 func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
@@ -138,8 +160,9 @@ func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get messages", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(messages)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(messages)
 }
 
 func (h *ChatHandler) DeleteChat(w http.ResponseWriter, r *http.Request) {

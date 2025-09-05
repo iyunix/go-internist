@@ -76,10 +76,12 @@ func (s *ChatService) StreamChatMessage(
 		return errors.New("chat not found or unauthorized")
 	}
 
+	// Save user message and bump chat updated_at so it surfaces in history.
 	userMessage := &domain.Message{ChatID: chatID, Role: "user", Content: prompt}
 	if _, err := s.messageRepo.Create(ctx, userMessage); err != nil {
 		return fmt.Errorf("failed to store user message: %w", err)
 	}
+	_ = s.chatRepo.TouchUpdatedAt(ctx, chatID)
 
 	embedding, err := s.aiService.CreateEmbedding(ctx, prompt)
 	if err != nil {
@@ -92,7 +94,6 @@ func (s *ChatService) StreamChatMessage(
 
 	// Build a normalized, stable, chunked CONTEXT to enable precise citations.
 	contextJSON := s.buildContextJSON(matches)
-
 	finalPrompt := s.buildFinalPrompt(contextJSON, prompt)
 
 	var fullReply strings.Builder
@@ -105,13 +106,14 @@ func (s *ChatService) StreamChatMessage(
 		return streamErr
 	}
 
-	// Persist assistant reply asynchronously.
+	// Persist assistant reply asynchronously and bump chat updated_at.
 	go func() {
 		if fullReply.Len() > 0 {
 			assistantMessage := &domain.Message{ChatID: chatID, Role: "assistant", Content: fullReply.String()}
 			if _, err := s.messageRepo.Create(context.Background(), assistantMessage); err != nil {
 				log.Printf("Failed to save assistant message: %v", err)
 			}
+			_ = s.chatRepo.TouchUpdatedAt(context.Background(), chatID)
 		}
 	}()
 	return nil
@@ -204,57 +206,28 @@ func (s *ChatService) buildContextJSON(matches []*pinecone.ScoredVector) string 
 	return b.String()
 }
 
-// buildFinalPrompt creates a strict instruction for the model to return JSON in a fixed schema.
+// buildFinalPrompt creates a Markdown-only instruction so the model returns clean Markdown.
 func (s *ChatService) buildFinalPrompt(contextJSON, question string) string {
-	if strings.TrimSpace(contextJSON) == "" {
-		contextJSON = "[]"
-	}
-	return fmt.Sprintf(`SYSTEM:
-You are "Internist", an expert medical assistant. You MUST return STRICT JSON ONLY. 
-- Begin with '{' and end with '}' as the very first and last characters. 
-- Do NOT include any text, explanations, code fences, or commentary outside the JSON.
-- Do NOT break inside JSON keys or values during streaming. 
-- Do NOT add extra fields or omit required fields. 
-- Do NOT use null. Use empty arrays [] or empty strings "" if needed.
-- No trailing commas in any array or object.
-
-YOUR RESPONSE MUST EXACTLY MATCH THIS SCHEMA:
-{
-  "items": [
-    {
-      "title": "string",
-      "answer_md": "string",
-      "additional_md": ["string"],
-      "citations": [
-        {
-          "chunk_id": "string",
-          "source_file": "string",
-          "section_heading": "string",
-          "quote": "string",
-          "similarity": "string"
-        }
-      ],
-      "tags": ["string"]
+    if strings.TrimSpace(contextJSON) == "" {
+        contextJSON = "[]"
     }
-  ],
-  "sources": [
-    { "source_file": "string", "display_name": "string", "citation_count": 0 }
-  ],
-  "meta": {
-    "no_answer_reason": "string|optional",
-    "notes": "string|optional"
-  }
-}
 
-POLICY:
-- Use ONLY the provided CONTEXT. Do NOT invent or use outside knowledge.
-- If CONTEXT is insufficient, return: "items": [] and set "meta.no_answer_reason" with a short explanation.
-- For every factual claim in answer_md, include at least one citation. When synthesizing from multiple chunks, include multiple citations.
-- Copy chunk_id and source_file EXACTLY from CONTEXT. Do NOT renumber or rename them.
-- Quotes in citations must be short (5–30 words) and directly from the 'text' or 'key_takeaways' in CONTEXT.
-- Tags should be relevant keywords (e.g., drug name, topic).
+    return fmt.Sprintf(`SYSTEM:
+You are "Internist", an expert medical assistant. Return the answer in Markdown ONLY.
+- Output must be valid Markdown with headings (#, ##, ###), paragraphs, bullet/numbered lists, and tables where helpful.
+- Do NOT return JSON, code fences with json, or any wrapper text before or after the Markdown.
+- Do NOT include any system or policy text in the output.
+- If content is insufficient, write a brief Markdown section explaining the limitation.
+- Keep clinical guidance precise, concise, and structured for fast scanning.
 
-CONTEXT (JSON array of chunks):
+STYLE:
+- Start with a clear H1 or H2 title for the topic.
+- Use short paragraphs, bullet points, and subheadings to organize content.
+- Use tables for concise comparisons (e.g., dosing, side effects, labs).
+- If citing context, add a final "## References" section listing relevant sources from CONTEXT (by file name or brief identifiers). Do not invent sources.
+- Do not include personal data or PHI.
+
+CONTEXT (JSON array of chunks to use as your sole evidence base):
 %s
 
 QUESTION:
@@ -263,10 +236,10 @@ QUESTION:
 }
 
 
-// --- THIS FUNCTION SIGNATURE IS NOW CORRECTED ---
 func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.Chat, error) {
 	return s.chatRepo.FindByUserID(ctx, userID)
 }
+
 func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) ([]domain.Message, error) {
 	chat, err := s.chatRepo.FindByID(ctx, chatID)
 	if err != nil || chat.UserID != userID {
@@ -274,6 +247,7 @@ func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) 
 	}
 	return s.messageRepo.FindByChatID(ctx, chatID)
 }
+
 func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error {
 	chat, err := s.chatRepo.FindByID(ctx, chatID)
 	if err != nil || chat.UserID != userID {
@@ -281,6 +255,7 @@ func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error
 	}
 	return s.chatRepo.Delete(ctx, chatID, userID)
 }
+
 func (s *ChatService) AddChatMessage(ctx context.Context, userID, chatID uint, content string) (string, domain.Chat, error) {
 	return "This is the non-streaming endpoint.", domain.Chat{}, nil
 }

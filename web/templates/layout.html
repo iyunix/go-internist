@@ -12,7 +12,12 @@
 </head>
 <body>
     {{block "content" .}}{{end}}
-
-    <script src="/static/js/chat.min.js" defer></script>
+    <!-- Load BEFORE markdown_renderer.js and chat.js -->
+    <script src="/static/js/logger.js" defer></script>
+    <script src="/static/js/vendor/marked.umd.js" defer></script>
+    <script src="/static/js/vendor/purify.min.js" defer></script>
+    <script src="/static/js/markdown_renderer.js" defer></script>
+    <script src="/static/js/chat.js" defer></script>
+</body>
 </body>
 </html>

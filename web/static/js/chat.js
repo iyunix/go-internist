@@ -1,197 +1,293 @@
 // File: web/static/js/chat.js
+// Chat interface with Markdown rendering for assistant responses
+// Dependencies: marked.js, DOMPurify, MarkdownRenderer helper must be loaded first
+
 document.addEventListener("DOMContentLoaded", function () {
-    const chatForm = document.getElementById("chatForm");
-    const chatInput = document.getElementById("chatInput");
-    const chatMessages = document.getElementById("chatMessages");
-    const newChatBtn = document.getElementById("newChatBtn");
-    const historyList = document.getElementById("historyList");
+  // DOM elements
+  const chatForm = document.getElementById("chatForm");
+  const chatInput = document.getElementById("chatInput");
+  const chatMessages = document.getElementById("chatMessages");
+  const newChatBtn = document.getElementById("newChatBtn");
+  const historyList = document.getElementById("historyList");
+  
+  // State
+  let activeChatId = new URLSearchParams(window.location.search).get("id");
 
-    let activeChatId = new URLSearchParams(window.location.search).get("id");
+  // --- Helper Functions ---
+  function toggleLoading(isLoading) {
+    chatInput.disabled = isLoading;
+    chatForm.querySelector("button").disabled = isLoading;
+  }
 
-    // --- Main Submit Handler ---
-    chatForm.addEventListener("submit", async function (e) {
-        e.preventDefault();
-        const prompt = chatInput.value.trim();
-        if (!prompt) return;
+  // Display message: user as plain text, assistant as rendered Markdown HTML
+  function displayMessage(content, role, returnElement = false) {
+    const li = document.createElement("li");
+    li.className = `msg ${role}`;
 
-        displayMessage(prompt, "user");
-        chatInput.value = "";
-        toggleLoading(true);
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = role === "user" ? "You" : "AI";
 
-        let chatId = activeChatId;
+    // Use div for assistant (allows block elements), p for user (inline only)
+    const container = document.createElement(role === "assistant" ? "div" : "p");
 
-        // STEP 1: If it's a new chat, create it first to get an ID.
-        if (!chatId) {
-            try {
-                const res = await fetch("/api/chats", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ title: prompt }),
-                });
-                if (!res.ok) throw new Error(`Failed to create chat: ${res.statusText}`);
-                
-                const newChat = await res.json();
-                chatId = newChat.ID;
-                
-                window.history.pushState({ chatId }, "", `/chat?id=${chatId}`);
-                await loadHistory();
-                setActiveChat(chatId);
+    if (role === "assistant") {
+      try {
+        // Render Markdown to safe HTML
+        window.MarkdownRenderer?.render(container, content || "");
+      } catch (e) {
+        // Fallback to plain text if renderer unavailable
+        container.textContent = content || "";
+      }
+    } else {
+      container.textContent = content || "";
+    }
 
-            } catch (err) {
-                console.error(err);
-                displayMessage("Error: Could not create a new chat session.", "assistant");
-                toggleLoading(false);
-                return;
-            }
-        }
+    li.appendChild(avatar);
+    li.appendChild(container);
+    chatMessages.appendChild(li);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 
-        // STEP 2: Start the stream now that we have a valid chat ID.
-        const aiMsgElement = displayMessage("", "assistant", true);
-        const eventSource = new EventSource(`/api/chats/${chatId}/stream?q=${encodeURIComponent(prompt)}`);
+    if (returnElement) return li;
+  }
 
-        eventSource.onmessage = (event) => {
-            aiMsgElement.querySelector("p").textContent += event.data;
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        };
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/chats", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (!res.ok) throw new Error(`Failed to load history: ${res.statusText}`);
 
-        eventSource.onerror = (err) => {
-            // This will now only fire on a genuine network error,
-            // not when the stream closes normally.
-            console.error("EventSource failed:", err);
-            displayMessage("A streaming error occurred. Please try again.", "assistant");
-            eventSource.close();
-            toggleLoading(false);
-        };
+      const chats = await res.json();
+      historyList.innerHTML = "";
 
-        // ADDED: This listens for our custom "done" event from the server.
-        eventSource.addEventListener('done', () => {
-            console.log("Stream successfully completed by server.");
-            eventSource.close();
-            toggleLoading(false);
+      if (Array.isArray(chats)) {
+        chats.forEach(chat => {
+          const id = String(chat.ID ?? chat.id ?? "");
+          const title = String(chat.Title ?? chat.title ?? "Untitled");
+          if (!id) return;
+
+          // Create proper li element for ul container
+          const li = document.createElement("li");
+          li.className = "history-item";
+          li.setAttribute("data-chat-id", id);
+          li.innerHTML = `<a href="/chat?id=${id}">${title}</a><button class="delete-chat-btn" title="Delete chat" aria-label="Delete chat">&times;</button>`;
+          historyList.appendChild(li);
         });
+        setActiveChat(activeChatId);
+      }
+    } catch (err) {
+      console.error("Failed to load history:", err);
+      safeLog('error', 'Failed to load chat history', { errorMessage: err.message, stack: err.stack });
+    }
+  }
+
+  async function loadMessages(chatId) {
+    if (!chatId) {
+      chatMessages.innerHTML = "";
+      activeChatId = null;
+      setActiveChat(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/chats/${chatId}/messages`, {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (!res.ok) {
+        window.location.href = "/chat";
+        return;
+      }
+
+      const messages = await res.json();
+      chatMessages.innerHTML = "";
+
+      if (Array.isArray(messages) && messages.length > 0) {
+        messages.forEach(msg => {
+          const role = msg.Role ?? msg.role ?? "assistant";
+          const content = msg.Content ?? msg.content ?? "";
+          const li = displayMessage("", role, true);
+          const container = li.querySelector(role === "assistant" ? "div" : "p");
+          
+          if (role === "assistant") {
+            try {
+              window.MarkdownRenderer?.render(container, content);
+            } catch (e) {
+              container.textContent = content;
+            }
+          } else {
+            container.textContent = content;
+          }
+        });
+      }
+      
+      activeChatId = chatId;
+      setActiveChat(chatId);
+    } catch (err) {
+      console.error("Failed to load messages:", err);
+      safeLog('error', 'Failed to load messages for chat', { chatId: chatId, errorMessage: err.message, stack: err.stack });
+    }
+  }
+
+  function setActiveChat(chatId) {
+    document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
+    if (chatId) {
+      const el = document.querySelector(`.history-item[data-chat-id='${chatId}']`);
+      if (el) el.classList.add("active");
+    }
+  }
+
+  function safeLog(level, message, payload) {
+    try {
+      if (typeof window.logToServer === "function") {
+        window.logToServer(level, message, payload);
+      }
+    } catch (_) {}
+  }
+
+  // --- Event Handlers ---
+  chatForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const prompt = chatInput.value.trim();
+    if (!prompt) return;
+
+    displayMessage(prompt, "user");
+    chatInput.value = "";
+    toggleLoading(true);
+
+    let chatId = activeChatId;
+
+    // Create new chat if none active
+    if (!chatId) {
+      try {
+        const csrf = document.querySelector("input[name='csrf_token']")?.value || "";
+        const res = await fetch("/api/chats", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {})
+          },
+          body: JSON.stringify({ title: prompt }),
+        });
+        if (!res.ok) throw new Error(`Failed to create chat: ${res.statusText}`);
+
+        const newChat = await res.json();
+        const createdId = newChat.ID ?? newChat.id;
+        if (!createdId) throw new Error("CreateChat response missing id");
+        chatId = String(createdId);
+
+        window.history.pushState({ chatId }, "", `/chat?id=${chatId}`);
+        await loadHistory();
+        setActiveChat(chatId);
+      } catch (err) {
+        console.error(err);
+        safeLog('error', 'Failed to create new chat', { errorMessage: err.message, stack: err.stack });
+        displayMessage("Error: Could not create a new chat session.", "assistant");
+        toggleLoading(false);
+        return;
+      }
+    }
+
+    // Stream assistant response with Markdown rendering
+    const aiMsgElement = displayMessage("", "assistant", true);
+    const container = aiMsgElement.querySelector("div");
+
+    let stream;
+    try {
+      stream = window.MarkdownRenderer?.createStream(container);
+    } catch (e) {
+      // Fallback if MarkdownRenderer not available
+      stream = {
+        buffer: "",
+        append(chunk) { 
+          this.buffer += String(chunk); 
+          container.textContent = this.buffer; 
+        },
+        flush() {}
+      };
+    }
+
+    const eventSource = new EventSource(`/api/chats/${chatId}/stream?q=${encodeURIComponent(prompt)}`);
+    eventSource.onmessage = (evt) => {
+      stream.append(evt.data);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    };
+    eventSource.addEventListener('done', () => {
+      eventSource.close();
+      stream.flush?.();
+      toggleLoading(false);
     });
+    eventSource.onerror = (err) => {
+      console.error("EventSource failed:", err);
+      safeLog('error', 'EventSource streaming failed', { chatId: chatId });
+      displayMessage("A streaming error occurred. Please try again.", "assistant");
+      eventSource.close();
+      toggleLoading(false);
+    };
+  });
 
-    // --- Helper Functions ---
-    function toggleLoading(isLoading) {
-        chatInput.disabled = isLoading;
-        chatForm.querySelector("button").disabled = isLoading;
+  newChatBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (activeChatId) {
+      window.history.pushState({}, "", "/chat");
+      loadMessages(null);
     }
+  });
 
-    function displayMessage(content, role, returnElement = false) {
-        const li = document.createElement("li");
-        li.className = `msg ${role}`;
-        
-        const avatar = document.createElement("span");
-        avatar.className = "avatar";
-        avatar.textContent = role === "user" ? "You" : "AI";
-        
-        const p = document.createElement("p");
-        p.textContent = content;
-        
-        li.appendChild(avatar);
-        li.appendChild(p);
-        chatMessages.appendChild(li);
-        
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        
-        if (returnElement) {
-            return li;
-        }
-    }
-    
-    async function loadHistory() {
+  historyList.addEventListener("click", async (e) => {
+    // Delete chat button
+    if (e.target.classList.contains("delete-chat-btn")) {
+      e.preventDefault();
+      const item = e.target.closest("li.history-item");
+      const chatId = item?.getAttribute("data-chat-id");
+      if (!chatId) return;
+
+      if (confirm("Are you sure you want to delete this chat?")) {
         try {
-            const res = await fetch("/api/chats");
-            if (!res.ok) return;
-            const chats = await res.json();
-            historyList.innerHTML = "";
-            if (chats) {
-                chats.forEach(chat => {
-                    const div = document.createElement("div");
-                    div.className = "history-item";
-                    div.setAttribute("data-chat-id", chat.ID);
-                    div.innerHTML = `<a href="/chat?id=${chat.ID}">${chat.Title}</a><button class="delete-chat-btn" title="Delete chat">&times;</button>`;
-                    historyList.prepend(div);
-                });
-                setActiveChat(activeChatId);
-            }
+          const res = await fetch(`/api/chats/${chatId}`, { 
+            method: "DELETE", 
+            credentials: "same-origin", 
+            cache: "no-store" 
+          });
+          if (res.ok) {
+            item.remove();
+            if (chatId === activeChatId) newChatBtn.click();
+          } else {
+            throw new Error(`Failed to delete chat: ${res.statusText}`);
+          }
         } catch (err) {
-            console.error("Failed to load history:", err);
+          console.error("Failed to delete chat", err);
+          safeLog('error', 'Failed to delete chat', { chatId: chatId, errorMessage: err.message, stack: err.stack });
         }
-    }
-    
-    async function loadMessages(chatId) {
-        if (!chatId) {
-            chatMessages.innerHTML = "";
-            activeChatId = null;
-            return;
-        }
-        try {
-            const res = await fetch(`/api/chats/${chatId}/messages`);
-            if (!res.ok) {
-                 window.location.href = "/chat";
-                 return;
-            }
-            const messages = await res.json();
-            chatMessages.innerHTML = "";
-            if(messages) {
-                messages.forEach(msg => displayMessage(msg.Content, msg.Role));
-            }
-            activeChatId = chatId;
-            setActiveChat(chatId);
-        } catch (err) {
-            console.error("Failed to load messages:", err);
-        }
+      }
+      return;
     }
 
-    function setActiveChat(chatId) {
-        document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
-        if(chatId) {
-            const el = document.querySelector(`.history-item[data-chat-id='${chatId}']`);
-            if(el) el.classList.add("active");
-        }
+    // Chat history link
+    if (e.target.tagName === 'A') {
+      e.preventDefault();
+      const item = e.target.closest("li.history-item");
+      const chatId = item?.getAttribute("data-chat-id");
+      if (chatId && chatId !== activeChatId) {
+        window.history.pushState({ chatId }, "", e.target.href);
+        loadMessages(chatId);
+      }
     }
+  });
 
-    // --- Event Listeners ---
-    newChatBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (activeChatId) {
-            window.history.pushState({}, "", "/chat");
-            loadMessages(null);
-        }
-    });
-
-    historyList.addEventListener("click", async (e) => {
-        if(e.target.classList.contains("delete-chat-btn")) {
-            e.preventDefault();
-            const item = e.target.closest(".history-item");
-            const chatId = item.getAttribute("data-chat-id");
-            if(confirm("Are you sure you want to delete this chat?")) {
-                try {
-                    const res = await fetch(`/api/chats/${chatId}`, { method: "DELETE" });
-                    if(res.ok) {
-                        item.remove();
-                        if (chatId === activeChatId) newChatBtn.click();
-                    }
-                } catch(err) {
-                    console.error("Failed to delete chat", err);
-                }
-            }
-        } else if (e.target.tagName === 'A') {
-            e.preventDefault();
-            const item = e.target.closest(".history-item");
-            const chatId = item.getAttribute("data-chat-id");
-            if (chatId !== activeChatId) {
-                window.history.pushState({ chatId }, "", e.target.href);
-                loadMessages(chatId);
-            }
-        }
-    });
-
-    // --- Initial Load ---
-    loadHistory().then(() => {
-        if (activeChatId) {
-            loadMessages(activeChatId);
-        }
-    });
+  // --- Initial Load ---
+  loadHistory().then(() => {
+    if (activeChatId) {
+      loadMessages(activeChatId);
+    }
+  }).catch(err => {
+    console.error("Error during initial page load:", err);
+    safeLog('error', 'Error during initial page load sequence', { errorMessage: err.message, stack: err.stack });
+  });
 });
