@@ -1,4 +1,3 @@
-// File: internal/handlers/chat_handler.go
 package handlers
 
 import (
@@ -7,7 +6,8 @@ import (
     "log"
     "net/http"
     "strconv"
-    "strings"  // <-- ADD THIS LINE
+    "strings"
+    "sync"
     "time"
 
     "github.com/gorilla/mux"
@@ -27,7 +27,7 @@ func NewChatHandler(userService *services.UserService, chatService *services.Cha
     }
 }
 
-// CreateChat handles creating a new chat record.
+// CreateChat handles creating a new chat record
 func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
     userID, ok := r.Context().Value(middleware.UserIDKey("userID")).(uint)
     if !ok {
@@ -56,7 +56,7 @@ func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
     _ = json.NewEncoder(w).Encode(chat)
 }
 
-// StreamChatSSE handles the streaming RAG process for an EXISTING chat.
+// StreamChatSSE handles SSE chat streaming
 func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
     userID, ok := r.Context().Value(middleware.UserIDKey("userID")).(uint)
     if !ok {
@@ -83,10 +83,11 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Set SSE headers
     w.Header().Set("Content-Type", "text/event-stream")
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Connection", "keep-alive")
-    w.Header().Set("X-Accel-Buffering", "no") // prevent proxy buffering
+    w.Header().Set("X-Accel-Buffering", "no")
 
     flusher, ok := w.(http.Flusher)
     if !ok {
@@ -94,12 +95,11 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Heartbeat ticker
     done := r.Context().Done()
     hb := time.NewTicker(15 * time.Second)
     defer hb.Stop()
 
-    // Start a goroutine for heartbeats
+    // Heartbeat
     go func() {
         for {
             select {
@@ -112,12 +112,14 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
         }
     }()
 
-    // Buffer tokens into meaningful chunks
+    var documentSources []string
+    var sourcesMutex sync.Mutex
+
     var tokenBuffer []string
     bufferSize := 0
-    const maxBufferSize = 50 // characters
-    const maxTokens = 5      // tokens
-    
+    const maxBufferSize = 50
+    const maxTokens = 5
+
     flushBuffer := func() {
         if len(tokenBuffer) > 0 {
             chunk := strings.Join(tokenBuffer, "")
@@ -125,7 +127,7 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
                 return
             }
             flusher.Flush()
-            tokenBuffer = tokenBuffer[:0] // clear buffer
+            tokenBuffer = tokenBuffer[:0]
             bufferSize = 0
         }
     }
@@ -133,34 +135,54 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
     onDelta := func(token string) error {
         tokenBuffer = append(tokenBuffer, token)
         bufferSize += len(token)
-        
-        // Flush on sentence boundaries or buffer limits
-        if strings.Contains(token, ".") || 
-           strings.Contains(token, "\n") || 
-           strings.Contains(token, "!") || 
-           strings.Contains(token, "?") ||
-           bufferSize >= maxBufferSize ||
-           len(tokenBuffer) >= maxTokens {
+
+        if strings.ContainsAny(token, ".!?\n") ||
+            bufferSize >= maxBufferSize ||
+            len(tokenBuffer) >= maxTokens {
             flushBuffer()
         }
-        
         return nil
     }
 
-    if err := h.ChatService.StreamChatMessage(r.Context(), userID, chatID, prompt, onDelta); err != nil {
-        log.Printf("[ChatHandler] StreamChatMessage error for user %d chat %d: %v", userID, chatID, err)
+    onSources := func(sources []string) {
+        sourcesMutex.Lock()
+        documentSources = sources
+        sourcesMutex.Unlock()
+
+        if len(sources) > 0 {
+            sourcesData := map[string]interface{}{
+                "type":    "sources",
+                "sources": sources,
+            }
+            sourcesJSON, _ := json.Marshal(sourcesData)
+            fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", sourcesJSON)
+            flusher.Flush()
+        }
+    }
+
+    if err := h.ChatService.StreamChatMessageWithSources(r.Context(), userID, chatID, prompt, onDelta, onSources); err != nil {
+        log.Printf("[ChatHandler] StreamChatMessageWithSources error for user %d chat %d: %v", userID, chatID, err)
         return
     }
 
-    // Flush any remaining tokens
     flushBuffer()
-    
+
+    sourcesMutex.Lock()
+    if len(documentSources) > 0 {
+        finalData := map[string]interface{}{
+            "type":    "final_sources",
+            "sources": documentSources,
+        }
+        finalJSON, _ := json.Marshal(finalData)
+        fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", finalJSON)
+        flusher.Flush()
+    }
+    sourcesMutex.Unlock()
+
     fmt.Fprintf(w, "event: done\ndata: \n\n")
     flusher.Flush()
     log.Printf("[ChatHandler] Gracefully closed stream for user %d", userID)
 }
-
-// --- Other existing handlers ---
 
 func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
     userID, ok := r.Context().Value(middleware.UserIDKey("userID")).(uint)

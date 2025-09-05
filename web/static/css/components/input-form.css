@@ -2,71 +2,89 @@
    Input Form Component
    ========================================================================== */
 
+/* The wrapper for the form and disclaimer at the bottom of the chat */
 .input-form-container {
-  padding: var(--spacing-lg) var(--spacing-xl);
-  background-color: var(--bg-main);
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
+  padding: 1.5rem 0 2rem 0; /* Vertical padding */
+  flex-shrink: 0; /* Prevents the form from being squashed */
+  background-color: transparent; /* Inherits from parent */
 }
 
+/* The form itself, containing the textarea and button */
 .input-form {
   display: flex;
-  gap: var(--spacing-md);
-  max-width: 800px;
-  margin: 0 auto;
-  align-items: flex-end;
+  gap: 0.5rem; /* 8px */
+  align-items: flex-end; /* Aligns textarea and button along their bottom edge */
 }
+
+/* -------------------------------------------------------------------------- */
+/* Textarea
+/* -------------------------------------------------------------------------- */
 
 .input-form textarea {
-  flex: 1;
-  min-height: 2.75rem;
-  max-height: 200px;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border: 1px solid var(--border);
-  border-radius: var(--border-radius-lg);
-  font-family: inherit;
+  flex: 1; /* Grow to fill available space */
+  min-height: 48px;
+  max-height: 120px;
+  padding: 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-family: var(--font-primary);
   font-size: var(--font-size-base);
-  line-height: var(--line-height-base);
-  background-color: var(--bg-main);
-  color: var(--text-primary);
+  line-height: var(--line-height-normal);
+  background-color: var(--color-surface);
+  color: var(--color-text-main);
   resize: none;
-  outline: none;
-  transition: var(--transition);
+  transition: var(--transition-fast);
 }
 
-.input-form textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+.input-form textarea:focus,
+.input-form textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  border-color: var(--color-primary);
 }
+
+.input-form textarea::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Send Button
+/* -------------------------------------------------------------------------- */
 
 .input-form button {
-  width: 2.75rem;
-  height: 2.75rem;
-  background-color: var(--primary);
-  color: white;
+  height: 48px;
+  padding: 0 18px;
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
   border: none;
-  border-radius: 50%;
+  border-radius: var(--border-radius);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: var(--transition);
+  transition: var(--transition-fast);
   flex-shrink: 0;
 }
 
 .input-form button:hover:not(:disabled) {
-  background-color: var(--primary-hover);
+  background-color: var(--color-primary-hover);
 }
 
 .input-form button:disabled {
-  opacity: 0.5;
+  /* Generates a light, disabled blue from our primary color */
+  background-color: color-mix(in srgb, var(--color-primary) 30%, #fff);
   cursor: not-allowed;
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Disclaimer Text
+/* -------------------------------------------------------------------------- */
 
 .disclaimer {
   display: block;
   text-align: center;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-top: var(--spacing-md);
+  font-size: var(--font-size-xs); /* 12px */
+  color: var(--color-text-subtle);
+  margin-top: 0.75rem; /* 12px */
 }

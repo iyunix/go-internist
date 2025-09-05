@@ -11,22 +11,24 @@
 html, body {
   height: 100vh;
   width: 100vw;
-  overflow: hidden;
+  overflow: hidden; /* App layout handles scrolling */
 }
 
 body {
-  font-family: var(--font-family);
+  /* UPDATED: Using official design system variables */
+  font-family: var(--font-primary);
   font-size: var(--font-size-base);
-  line-height: var(--line-height-base);
-  color: var(--text-primary);
-  background-color: var(--bg-main);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-main);
+  background-color: var(--color-bg);
+  
+  /* Improves font rendering */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
+button, input, textarea, select {
+  font-family: inherit; /* Ensures form elements use the same font */
 }
 
 a {

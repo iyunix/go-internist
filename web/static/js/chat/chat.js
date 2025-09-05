@@ -1,5 +1,5 @@
 // File: web/static/js/chat/chat.js  
-// FIXED: Uses new ChatStreamRenderer properly
+// UPDATED: Added auto-resizing textarea, enter-to-send, and quick actions.
 
 import { ChatUI } from './chat-ui.js';
 import { ChatAPI } from './chat-api.js';
@@ -14,6 +14,7 @@ class ChatApp {
       chatMessages: document.getElementById("chatMessages"),
       newChatBtn: document.getElementById("newChatBtn"),
       historyList: document.getElementById("historyList"),
+      quickActionsContainer: document.getElementById("quickActions"), // NEW: Quick actions container
       submitButton: null
     };
     
@@ -37,6 +38,13 @@ class ChatApp {
       
       if (this.activeChatId) {
         await this.loadMessages(this.activeChatId);
+      } else {
+        // NEW: If no active chat, show quick actions
+        this.ui.renderQuickActions([
+            "What is Go?", 
+            "Explain project structure", 
+            "Write a simple REST API"
+        ]);
       }
 
       this.isInitialized = true;
@@ -58,10 +66,16 @@ class ChatApp {
   }
 
   async loadMessages(chatId) {
+    this.ui.clearQuickActions(); // NEW: Clear quick actions when loading a chat
     if (!chatId) {
       this.ui.clearMessages();
       this.activeChatId = null;
       this.ui.setActiveChat(null);
+      this.ui.renderQuickActions([ // NEW: Show quick actions on a new chat
+        "What is Go?", 
+        "Explain project structure", 
+        "Write a simple REST API"
+      ]);
       return;
     }
 
@@ -83,8 +97,10 @@ class ChatApp {
     const prompt = this.elements.chatInput.value.trim();
     if (!prompt) return;
 
+    this.ui.clearQuickActions(); // NEW: Clear quick actions on first message
     this.ui.displayMessage(prompt, "user");
     this.ui.clearInput();
+    this.ui.resetTextareaHeight(); // NEW: Reset textarea height after sending
     this.ui.toggleLoading(true);
 
     let chatId = this.activeChatId;
@@ -106,42 +122,38 @@ class ChatApp {
     this.streamResponse(chatId, prompt);
   }
 
-  // FIXED streamResponse method in chat.js
   streamResponse(chatId, prompt) {
-    // Create empty assistant message with skeleton
     this.ui.displayMessage("", "assistant");
-    
-    // Show skeleton status updates
     this.ui.updateSkeletonStatus('searching', 'Searching knowledge base...');
-    
-    // Simulate processing stages for better UX
-    setTimeout(() => {
-      if (this.ui.currentSkeletonLoader) {
-        this.ui.updateSkeletonStatus('processing', 'Processing search results...');
-      }
-    }, 800);
-    
-    setTimeout(() => {
-      if (this.ui.currentSkeletonLoader) {
-        this.ui.updateSkeletonStatus('thinking', 'AI is thinking...');
-      }
-    }, 1600);
+    setTimeout(() => this.ui.updateSkeletonStatus('processing', 'Processing results...'), 800);
+    setTimeout(() => this.ui.updateSkeletonStatus('thinking', 'AI is thinking...'), 1600);
 
-    // Create stream renderer
     const streamRenderer = new ChatStreamRenderer(this.ui);
     const eventSource = this.api.createStream(chatId, prompt);
 
     eventSource.onmessage = (evt) => {
-      // Remove skeleton on first data chunk
-      if (this.ui.currentSkeletonLoader) {
-        this.ui.replaceSkeletonWithContent();
-      }
+      this.ui.replaceSkeletonWithContent();
       streamRenderer.appendChunk(evt.data);
     };
+
+    eventSource.addEventListener("metadata", (evt) => {
+      try {
+        const metadata = JSON.parse(evt.data);
+        if (metadata.type === "sources") this.ui.setSources(metadata.sources);
+        else if (metadata.type === "final_sources") {
+          this.ui.setSources(metadata.sources);
+          this.ui.addFootnote(metadata.sources);
+        }
+      } catch (err) {
+        console.warn("Failed to parse metadata:", err);
+      }
+    });
 
     eventSource.addEventListener("done", () => {
       eventSource.close();
       streamRenderer.finalize();
+      const sources = this.ui.getSources();
+      if (sources && sources.length > 0) this.ui.addFootnote(sources);
       this.ui.toggleLoading(false);
     });
 
@@ -153,32 +165,64 @@ class ChatApp {
       this.ui.toggleLoading(false);
     };
   }
+  
+  // NEW: Handle textarea auto-resize
+  handleTextareaInput() {
+      const textarea = this.elements.chatInput;
+      textarea.style.height = 'auto'; // Reset height
+      textarea.style.height = `${textarea.scrollHeight}px`; // Set to content height
+  }
+  
+  // NEW: Handle "Enter to Send"
+  handleTextareaKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.elements.chatForm.requestSubmit();
+      }
+  }
+  
+  // NEW: Handle clicking on a quick action chip
+  handleQuickActionClick(e) {
+      if (e.target.classList.contains('quick-action-chip')) {
+          const prompt = e.target.textContent;
+          this.elements.chatInput.value = prompt;
+          this.elements.chatForm.requestSubmit();
+      }
+  }
 
   bindEvents() {
     this.elements.chatForm.addEventListener("submit", (e) => this.handleSubmit(e));
+    this.elements.chatInput.addEventListener('input', () => this.handleTextareaInput()); // NEW
+    this.elements.chatInput.addEventListener('keydown', (e) => this.handleTextareaKeydown(e)); // NEW
 
     this.elements.newChatBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      if (this.activeChatId) {
+      if (this.activeChatId || this.elements.chatMessages.children.length > 0) {
         window.history.pushState({}, "", "/chat");
         this.loadMessages(null);
       }
     });
 
     this.elements.historyList.addEventListener("click", async (e) => {
+      const link = e.target.closest("a.history-item");
+      if (!link) return;
+
       if (e.target.classList.contains("delete-chat-btn")) {
-        await this.handleDeleteChat(e);
-      } else if (e.target.tagName === 'A') {
-        this.handleHistoryLink(e);
+        await this.handleDeleteChat(e, link);
+      } else {
+        this.handleHistoryLink(e, link);
       }
     });
+    
+    // NEW: Add event listener for quick actions
+    this.elements.quickActionsContainer.addEventListener('click', (e) => this.handleQuickActionClick(e));
   }
 
-  async handleDeleteChat(e) {
+  async handleDeleteChat(e, item) {
+    // UPDATED: Now receives the item directly
     e.preventDefault();
     e.stopPropagation();
     
-    const item = e.target.closest("li.history-item");
     const chatId = item?.getAttribute("data-chat-id");
     if (!chatId) return;
 
@@ -195,14 +239,14 @@ class ChatApp {
     }
   }
 
-  handleHistoryLink(e) {
+  handleHistoryLink(e, item) {
+    // UPDATED: Now receives the item directly
     e.preventDefault();
     
-    const item = e.target.closest("li.history-item");
     const chatId = item?.getAttribute("data-chat-id");
     
     if (chatId && chatId !== this.activeChatId) {
-      window.history.pushState({ chatId }, "", e.target.href);
+      window.history.pushState({ chatId }, "", item.href);
       this.loadMessages(chatId);
     }
   }

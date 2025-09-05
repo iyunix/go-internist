@@ -1,0 +1,32 @@
+{{template "layout.html" .}}
+
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/auth.css">
+    <link rel="stylesheet" href="/static/css/verify_sms.css">
+{{end}}
+
+{{define "content"}}
+<div class="auth-container">
+    <div class="auth-form">
+        <div class="auth-header">
+            <h1>Verify Your Phone</h1>
+            <h2>Enter the code sent to your phone</h2>
+        </div>
+        {{if .Error}}
+        <p class="form-error">{{.Error}}</p>
+        {{end}}
+        <form action="/verify-sms" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="phone_number" value="{{.PhoneNumber}}">
+            <div class="form-group">
+                <label for="sms_code">Verification Code</label>
+                <input id="sms_code" name="sms_code" type="text" required maxlength="6" autocomplete="one-time-code">
+            </div>
+            <button type="submit" class="btn btn-primary">Verify</button>
+        </form>
+        <div class="auth-footer">
+            <p>Didn't receive a code? <a href="/resend-sms?phone={{.PhoneNumber}}">Resend</a></p>
+        </div>
+    </div>
+</div>
+{{end}}

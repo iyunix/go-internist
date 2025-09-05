@@ -1,165 +1,113 @@
 // File: web/static/js/chat/chat-ui.js
-// FIXED: Complete skeleton loader functionality
+// UPDATED: Aligned with new HTML structure and added methods for new UX features.
 
 import { Utils } from '../utils.js';
 
 export class ChatUI {
   constructor(elements) {
     this.elements = elements;
-    this.lastAssistantMessage = null;
-    this.currentSkeletonLoader = null; // Track active skeleton
+    this.lastAssistantMessageBubble = null; // Changed to target the bubble specifically
+    this.currentSkeletonLoader = null;
+    this.currentSources = [];
   }
 
-  // Create skeleton loader HTML
+  // --- Footnote & Source Methods (Unchanged) ---
+  createFootnote(sources) {
+    if (!sources || !sources.length === 0) return '';
+    const sourceItems = sources.map(source => `<li>${this.escapeHtml(source)}</li>`).join('');
+    return `<div class="message-footnote"><h6>Sources</h6><ul>${sourceItems}</ul></div>`;
+  }
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  addFootnote(sources) {
+    if (!this.lastAssistantMessageBubble || !sources || !sources.length === 0) return;
+    const existing = this.lastAssistantMessageBubble.parentNode.querySelector('.message-footnote');
+    if (existing) existing.remove();
+    this.lastAssistantMessageBubble.parentNode.insertAdjacentHTML('beforeend', this.createFootnote(sources));
+    Utils.scrollToBottom(this.elements.chatMessages);
+  }
+  setSources(sources) { this.currentSources = sources || []; }
+  getSources() { return this.currentSources; }
+
+  // --- Skeleton Loader Methods (Unchanged Logic, just target bubble) ---
   createSkeletonLoader() {
-    return `
-      <div class="skeleton-loader">
-        <div class="skeleton-status">
-          <div class="skeleton-status-icon searching"></div>
-          <span class="skeleton-status-text">Searching knowledge base...</span>
-        </div>
-        <div class="skeleton-lines">
-          <div class="skeleton-line medium"></div>
-          <div class="skeleton-line long"></div>
-          <div class="skeleton-line short"></div>
-        </div>
-      </div>
-    `;
+    return `<div class="skeleton-loader"><div class="skeleton-status"><div class="skeleton-status-icon searching"></div><span class="skeleton-status-text">Searching...</span></div><div class="skeleton-lines"><div class="skeleton-line"></div><div class="skeleton-line"></div></div></div>`;
   }
-
-  // Update skeleton status
   updateSkeletonStatus(status, message) {
     if (!this.currentSkeletonLoader) return;
-
-    const statusIcon = this.currentSkeletonLoader.querySelector('.skeleton-status-icon');
-    const statusText = this.currentSkeletonLoader.querySelector('.skeleton-status-text');
-
-    if (statusIcon && statusText) {
-      // Remove all status classes
-      statusIcon.className = 'skeleton-status-icon';
-      
-      // Add new status class and update text
-      switch (status) {
-        case 'searching':
-          statusIcon.classList.add('searching');
-          statusText.textContent = message || 'Searching knowledge base...';
-          break;
-        case 'processing':
-          statusIcon.classList.add('processing');
-          statusText.textContent = message || 'Processing search results...';
-          break;
-        case 'thinking':
-          statusIcon.classList.add('thinking');
-          statusText.textContent = message || 'AI is thinking...';
-          break;
-        case 'responding':
-          statusIcon.classList.add('responding');
-          statusText.textContent = message || 'Generating response...';
-          break;
-        case 'completed':
-          statusIcon.classList.add('completed');
-          statusText.textContent = message || 'Response ready';
-          break;
-        case 'error':
-          statusIcon.classList.add('error');
-          statusText.textContent = message || 'Error occurred';
-          break;
-      }
-    }
+    const icon = this.currentSkeletonLoader.querySelector('.skeleton-status-icon');
+    const text = this.currentSkeletonLoader.querySelector('.skeleton-status-text');
+    if (icon) icon.className = `skeleton-status-icon ${status}`;
+    if (text) text.textContent = message;
   }
-
-  // Remove skeleton and prepare for content
   replaceSkeletonWithContent() {
-    if (this.lastAssistantMessage && this.currentSkeletonLoader) {
-      this.lastAssistantMessage.innerHTML = '';
+    if (this.lastAssistantMessageBubble && this.currentSkeletonLoader) {
+      this.lastAssistantMessageBubble.innerHTML = '';
       this.currentSkeletonLoader = null;
     }
   }
 
+  // --- Core UI Methods ---
+  
   toggleLoading(isLoading) {
     this.elements.chatInput.disabled = isLoading;
     this.elements.submitButton.disabled = isLoading;
   }
-
-  // FIXED: Create and display message with skeleton support
-  displayMessage(content, role, returnElement = false) {
+  
+  // UPDATED: Rewritten to match new HTML structure from chat.html template
+  displayMessage(content, role) {
     const li = document.createElement("li");
-    li.className = `msg ${role}`;
+    li.className = `message-item ${role}`;
 
-    const avatar = document.createElement("span");
+    const avatar = document.createElement("img");
     avatar.className = "avatar";
-    avatar.textContent = role === "user" ? "You" : "AI";
+    // NOTE: You'll want to set the src for your avatars, e.g., based on role
+    avatar.src = role === "user" ? "/static/img/user-avatar.png" : "/static/img/ai-avatar.png"; 
+    avatar.alt = `${role} avatar`;
 
-    const container = document.createElement(role === "assistant" ? "div" : "p");
+    const messageBubble = document.createElement("div");
+    messageBubble.className = "message-bubble";
 
     if (role === "assistant") {
-      container.classList.add("md");
-      this.lastAssistantMessage = container;
+      this.lastAssistantMessageBubble = messageBubble;
       
-      // Show skeleton if no content provided
-      if (!content) {
-        container.innerHTML = this.createSkeletonLoader();
-        this.currentSkeletonLoader = container.querySelector('.skeleton-loader');
+      if (!content) { // If no content, show skeleton loader
+        messageBubble.innerHTML = this.createSkeletonLoader();
+        this.currentSkeletonLoader = messageBubble.querySelector('.skeleton-loader');
       } else {
-        try {
-          window.MarkdownRenderer?.render(container, content);
-        } catch (e) {
-          container.textContent = content;
-        }
+        window.MarkdownRenderer?.render(messageBubble, content);
       }
-    } else {
-      container.textContent = content || "";
+    } else { // User message
+      messageBubble.textContent = content || "";
     }
 
     li.appendChild(avatar);
-    li.appendChild(container);
+    li.appendChild(messageBubble);
     this.elements.chatMessages.appendChild(li);
-    Utils.scrollToBottom(this.elements.chatMessages, false);
-
-    if (returnElement) return li;
+    Utils.scrollToBottom(this.elements.chatMessages);
   }
-
-  // Update only the last assistant message (for streaming)
-  updateLastAssistantMessage(content, isMarkdown = true) {
-    if (!this.lastAssistantMessage) return;
-
-    // Remove skeleton if it exists
-    if (this.currentSkeletonLoader) {
-      this.replaceSkeletonWithContent();
-    }
-
-    try {
-      if (isMarkdown) {
-        window.MarkdownRenderer?.render(this.lastAssistantMessage, content);
-      } else {
-        this.lastAssistantMessage.textContent = content;
-      }
-      Utils.scrollToBottom(this.elements.chatMessages, false);
-    } catch (e) {
-      this.lastAssistantMessage.textContent = content;
-    }
-  }
-
-  // Get the last assistant message container for streaming
+  
   getLastAssistantMessageContainer() {
-    return this.lastAssistantMessage;
+    return this.lastAssistantMessageBubble;
   }
 
   clearMessages() {
     this.elements.chatMessages.innerHTML = "";
-    this.lastAssistantMessage = null;
+    this.lastAssistantMessageBubble = null;
     this.currentSkeletonLoader = null;
   }
 
   clearInput() {
     this.elements.chatInput.value = "";
+    this.elements.chatInput.focus();
   }
 
   setActiveChat(chatId) {
-    document.querySelectorAll(".history-item.active").forEach(el => 
-      el.classList.remove("active")
-    );
-    
+    // This now targets the <li> wrapper for the history item
+    document.querySelectorAll(".history-item.active").forEach(el => el.classList.remove("active"));
     if (chatId) {
       const el = document.querySelector(`.history-item[data-chat-id='${chatId}']`);
       if (el) el.classList.add("active");
@@ -168,34 +116,56 @@ export class ChatUI {
 
   renderHistory(chats) {
     this.elements.historyList.innerHTML = "";
+    if (!Array.isArray(chats)) return;
 
-    if (Array.isArray(chats)) {
-      chats.forEach(chat => {
-        const id = String(chat.ID ?? chat.id ?? "");
-        const title = String(chat.Title ?? chat.title ?? "Untitled");
-        if (!id) return;
+    chats.forEach(chat => {
+      const id = String(chat.ID ?? "");
+      const title = this.escapeHtml(String(chat.Title ?? "Untitled"));
+      if (!id) return;
 
-        const li = document.createElement("li");
-        li.className = "history-item";
-        li.setAttribute("data-chat-id", id);
-        li.innerHTML = `
-          <a href="/chat?id=${id}">${title}</a>
-          <button class="delete-chat-btn" title="Delete chat" aria-label="Delete chat">&times;</button>
-        `;
-        this.elements.historyList.appendChild(li);
-      });
-    }
+      const li = document.createElement("li");
+      // This is the structure our CSS and JS expects now
+      li.className = "history-item"; 
+      li.setAttribute("data-chat-id", id);
+      
+      const anchor = document.createElement("a");
+      anchor.href = `/chat?id=${id}`;
+      anchor.textContent = title;
+      // We are now styling the parent `li` for hover/active states
+
+      // NOTE: Delete button functionality is not in the design brief,
+      // but the old code had it. Let's keep it simple for now.
+      // If you want it back, we can add a delete button element here.
+      
+      li.appendChild(anchor);
+      this.elements.historyList.appendChild(li);
+    });
   }
 
   renderMessages(messages) {
     this.clearMessages();
-
-    if (Array.isArray(messages) && messages.length > 0) {
-      messages.forEach(msg => {
-        const role = msg.Role ?? msg.role ?? "assistant";
-        const content = msg.Content ?? msg.content ?? "";
-        this.displayMessage(content, role);
+    if (!Array.isArray(messages)) return;
+    messages.forEach(msg => this.displayMessage(msg.Content || "", msg.Role || "assistant"));
+  }
+  
+  // NEW: Method to render quick action chips
+  renderQuickActions(actions) {
+      this.clearQuickActions();
+      actions.forEach(actionText => {
+          const chip = document.createElement('button');
+          chip.className = 'quick-action-chip';
+          chip.textContent = actionText;
+          this.elements.quickActionsContainer.appendChild(chip);
       });
-    }
+  }
+  
+  // NEW: Method to clear quick actions
+  clearQuickActions() {
+      this.elements.quickActionsContainer.innerHTML = '';
+  }
+  
+  // NEW: Method to reset textarea height
+  resetTextareaHeight() {
+      this.elements.chatInput.style.height = 'auto';
   }
 }

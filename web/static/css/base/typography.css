@@ -1,52 +1,70 @@
 /* ==========================================================================
-   Typography Styles
+   Typography Styles for Markdown Content
    ========================================================================== */
 
-.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
-  font-weight: 600;
+/* UPDATED: Selectors now target elements inside .message-bubble */
+.message-bubble h1, 
+.message-bubble h2, 
+.message-bubble h3, 
+.message-bubble h4, 
+.message-bubble h5, 
+.message-bubble h6 {
+  font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
-  margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
+  margin: var(--spacing-lg, 1.5rem) 0 var(--spacing-sm, 0.875rem) 0;
+  color: var(--color-text-main);
 }
 
-.md h1:first-child,
-.md h2:first-child,
-.md h3:first-child {
+.message-bubble h1:first-child,
+.message-bubble h2:first-child,
+.message-bubble h3:first-child {
   margin-top: 0;
 }
 
-.md h1 { font-size: 1.5rem; }
-.md h2 { font-size: 1.25rem; }
-.md h3 { font-size: 1.125rem; }
-.md h4, .md h5, .md h6 { font-size: 1rem; }
+.message-bubble h1 { font-size: 1.5rem; }
+.message-bubble h2 { font-size: 1.25rem; }
+.message-bubble h3 { font-size: 1.125rem; }
+.message-bubble h4, 
+.message-bubble h5, 
+.message-bubble h6 { font-size: 1rem; }
 
-.md p {
-  margin: var(--spacing-md) 0;
-  line-height: var(--line-height-base);
+.message-bubble p {
+  margin: var(--spacing-md, 1rem) 0;
+  line-height: var(--line-height-normal);
+}
+.message-bubble p:first-child {
+  margin-top: 0;
+}
+.message-bubble p:last-child {
+  margin-bottom: 0;
 }
 
-.md code {
-  background-color: var(--inline-code-bg);
+.message-bubble code {
+  background-color: var(--code-bg);
   color: var(--code-text);
   padding: 0.125rem 0.25rem;
-  border-radius: 0.25rem;
+  border-radius: 4px; /* A smaller radius for inline elements */
   font-family: var(--font-mono);
   font-size: 0.875em;
 }
 
-.md pre {
+.message-bubble pre {
   background-color: var(--code-bg);
   border: 1px solid var(--code-border);
   border-radius: var(--border-radius);
-  padding: var(--spacing-lg);
-  margin: var(--spacing-lg) 0;
+  padding: var(--spacing-lg, 1.5rem);
+  margin: var(--spacing-lg, 1.5rem) 0;
   overflow-x: auto;
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   line-height: 1.4;
 }
 
-.md pre code {
+/* Reset styles for code blocks inside a <pre> tag */
+.message-bubble pre code {
   background: none;
   padding: 0;
   border-radius: 0;
+  border: none;
+  color: inherit;
 }

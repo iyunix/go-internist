@@ -1,0 +1,17 @@
+{{template "layout.html" .}}
+
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/error.css">
+{{end}}
+
+{{define "content"}}
+<section class="error-page">
+    <div class="error-container">
+        <h1 class="error-title">{{.Code}}</h1>
+        <h2 class="error-message">{{.Message}}</h2>
+        <p class="error-desc">{{.Description}}</p>
+        <a href="/" class="btn btn-primary">Back to Home</a>
+    </div>
+</section>
+{{end}}

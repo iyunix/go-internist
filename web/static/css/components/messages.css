@@ -2,89 +2,123 @@
    Messages Component
    ========================================================================== */
 
+/* The main container for the list of messages */
 .messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-xl);
+  flex: 1; /* Grow to fill available space */
+  overflow-y: auto; /* Enable scrolling for long conversations */
+  padding: var(--spacing-lg) 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
-  background-color: var(--bg-main);
+  gap: 1rem; /* Space between message items */
 }
 
+/* Custom scrollbar for a cleaner look */
 .messages::-webkit-scrollbar {
   width: 6px;
 }
-
 .messages::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .messages::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--color-border);
   border-radius: 3px;
 }
 
-.msg {
+
+/* -------------------------------------------------------------------------- */
+/* Individual Message Item (Avatar + Bubble)
+/* -------------------------------------------------------------------------- */
+
+.message-item {
   display: flex;
   align-items: flex-start;
-  gap: var(--spacing-md);
-  max-width: 80%;
+  gap: 0.75rem; /* 12px space between avatar and bubble */
+  max-width: 85%;
   animation: fadeIn 0.3s ease-out;
 }
 
-.msg.user {
+.message-item.user {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
 
-.msg.assistant {
+.message-item.ai {
   align-self: flex-start;
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Avatar
+/* -------------------------------------------------------------------------- */
 
 .avatar {
   width: var(--avatar-size);
   height: var(--avatar-size);
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 600;
   flex-shrink: 0;
+  margin-top: 4px; /* Align avatar nicely with the top of the bubble */
+  background-color: var(--color-border); /* A default background */
 }
 
-.msg.user .avatar {
-  background-color: var(--user-bg);
-  color: var(--user-text);
+
+/* -------------------------------------------------------------------------- */
+/* Message Bubble
+/* -------------------------------------------------------------------------- */
+
+.message-bubble {
+  padding: 14px 18px;
+  border-radius: var(--border-radius-lg); /* 12px */
+  line-height: var(--line-height-normal);
+  word-wrap: break-word; /* Ensure long words don't break the layout */
 }
 
-.msg.assistant .avatar {
-  background-color: var(--assistant-bg);
-  color: var(--assistant-text);
-  border: 1px solid var(--border);
+.message-item.user .message-bubble {
+  background-color: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
 }
 
-.msg p {
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-radius: var(--border-radius-lg);
-  line-height: var(--line-height-base);
-  word-wrap: break-word;
+.message-item.ai .message-bubble {
+  background-color: var(--ai-bubble-bg);
+  color: var(--ai-bubble-text);
+  border: 1px solid var(--ai-bubble-border);
 }
 
-.msg.user p {
-  background-color: var(--user-bg);
-  color: var(--user-text);
+
+/* -------------------------------------------------------------------------- */
+/* Timestamp (Optional)
+/* -------------------------------------------------------------------------- */
+
+/* To use, add <span class="timestamp">...</span> after the .message-bubble */
+.timestamp {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  font-size: var(--font-size-xs); /* 12px */
+  color: var(--color-text-subtle);
+}
+.message-item.user .timestamp {
+  text-align: right;
+}
+.message-item.ai .timestamp {
+  text-align: left;
 }
 
-.msg.assistant .md {
-  background-color: var(--assistant-bg);
-  color: var(--assistant-text);
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-radius: var(--border-radius-lg);
-  line-height: var(--line-height-base);
-  word-wrap: break-word;
-  border: 1px solid var(--border-light);
-  transition: var(--transition);
+
+/* -------------------------------------------------------------------------- */
+/* Markdown content inside bubbles
+/* -------------------------------------------------------------------------- */
+
+/* Ensure markdown-generated elements have no extra margin */
+.message-bubble > *:first-child {
+  margin-top: 0;
+}
+.message-bubble > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Style for incomplete text fragments during streaming */
+.streaming-text-fragment {
+  opacity: 0.7;
+  font-family: var(--font-mono);
 }

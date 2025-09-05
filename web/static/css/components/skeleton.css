@@ -5,20 +5,17 @@
 .skeleton-loader {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-lg);
-  background-color: var(--assistant-bg);
-  border: 1px solid var(--border-light);
-  border-radius: var(--border-radius-lg);
-  min-height: 60px;
+  gap: var(--spacing-md, 0.75rem); /* Added fallback */
+  /* This component lives inside the .message-bubble, so it doesn't need its own padding/border */
 }
 
 .skeleton-status {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-sm, 0.5rem);
   font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
 }
 
 .skeleton-status-icon {
@@ -29,38 +26,46 @@
   overflow: hidden;
 }
 
+/* UPDATED: Colors now use our design system palette */
 .skeleton-status-icon.searching {
-  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 .skeleton-status-icon.processing {
-  background: linear-gradient(90deg, #f59e0b, #d97706);
+  background: var(--color-text-secondary); /* A neutral color from our palette */
   animation: spin 1s linear infinite;
 }
 
 .skeleton-status-icon.thinking {
-  background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+  background: var(--color-accent); /* Using our accent color */
   animation: bounce 1s ease-in-out infinite;
 }
 
 .skeleton-lines {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 0.5rem; /* 8px */
 }
 
 .skeleton-line {
-  height: 12px;
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  height: 14px;
+  /* UPDATED: Uses theme variables, so it will work in light/dark mode */
+  background: linear-gradient(90deg, var(--color-bg) 25%, var(--color-border) 50%, var(--color-bg) 75%);
   background-size: 200% 100%;
-  border-radius: 6px;
+  border-radius: 4px;
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+/* These were in the old file, keeping them for flexibility */
 .skeleton-line.short { width: 60%; }
 .skeleton-line.medium { width: 80%; }
 .skeleton-line.long { width: 95%; }
+
+
+/* ==========================================================================
+   Animations (Unchanged)
+   ========================================================================== */
 
 @keyframes shimmer {
   0% { background-position: -200% 0; }
@@ -80,9 +85,4 @@
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
-}
-
-@keyframes typing-dots {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-10px); opacity: 1; }
 }

@@ -1,0 +1,43 @@
+/* ==========================================================================
+   Source Footnotes Component
+   ========================================================================== */
+
+/* The main container for the source list, appearing below a message bubble. */
+.message-footnote {
+  margin-top: 1rem; /* Space between the message bubble and the footnote */
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.footnote-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem; /* 8px space between title and items */
+}
+
+/* The "Sources:" title */
+.footnote-title {
+  font-size: var(--font-size-sm); /* 14px */
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+}
+
+/* Container for the individual source items to allow wrapping */
+.footnote-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem; /* 8px */
+}
+
+/* Individual source item, styled as a "pill" or "tag" */
+.footnote-item {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: var(--font-size-xs); /* 12px */
+  font-weight: var(--font-weight-medium);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px; /* Fully rounded pill shape */
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}

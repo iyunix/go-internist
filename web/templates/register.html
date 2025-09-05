@@ -1,33 +1,51 @@
-{{define "register.html"}}
 {{template "layout.html" .}}
-{{end}}
 
 {{define "styles"}}
-    <link rel="stylesheet" href="/static/css/auth.min.css">
+    <link rel="stylesheet" href="/static/css/auth.css">
 {{end}}
 
 {{define "content"}}
-<div class="auth-form">
-    <h2>Create an Account</h2>
-    {{if .Error}}
-    <p class="error">{{.Error}}</p>
-    {{end}}
-    <form action="/register" method="POST">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <div>
-            <label for="username">Username</label>
-            <input id="username" name="username" type="text" required>
+<!-- NEW: Wrapper to center the form on the page -->
+<div class="auth-container">
+    <div class="auth-form">
+        <div class="auth-header">
+            <!-- NEW: Added branding for consistency -->
+            <h1>Internist</h1>
+            <h2>Create an Account</h2>
         </div>
-        <div>
-            <label for="phone_number">Phone Number</label>
-            <input id="phone_number" name="phone_number" type="text" required>
+
+        {{if .Error}}
+        <!-- UPDATED: Added a specific class for easier styling -->
+        <p class="form-error">{{.Error}}</p>
+        {{end}}
+
+        <form action="/register" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <!-- UPDATED: Added .form-group for consistent spacing -->
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input id="username" name="username" type="text" required>
+            </div>
+
+            <div class="form-group">
+                <label for="phone_number">Phone Number</label>
+                <input id="phone_number" name="phone_number" type="tel" required> <!-- Changed type to "tel" for better semantics -->
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" required minlength="8">
+            </div>
+
+            <!-- UPDATED: Added classes for button styling -->
+            <button type="submit" class="btn btn-primary">Sign Up</button>
+        </form>
+        
+        <!-- NEW: Wrapper for the footer link -->
+        <div class="auth-footer">
+            <p>Already have an account? <a href="/login">Log in</a></p>
         </div>
-        <div>
-            <label for="password">Password</label>
-            <input id="password" name="password" type="password" required minlength="8">
-        </div>
-        <button type="submit">Sign Up</button>
-    </form>
-    <p>Already have an account? <a href="/login">Log in</a></p>
+    </div>
 </div>
 {{end}}

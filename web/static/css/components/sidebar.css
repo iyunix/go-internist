@@ -3,17 +3,28 @@
    ========================================================================== */
 
 .sidebar {
-  display: flex; /* Changed from 'none' to 'flex' */
+  display: flex;
   flex-direction: column;
-  width: var(--sidebar-width);
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
-  flex-shrink: 0;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacing-lg, 1.5rem);
+  z-index: 10;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Header & Title
+/* -------------------------------------------------------------------------- */
+
 .sidebar-header {
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--spacing-lg, 1.5rem);
+}
+
+.sidebar-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-text-main);
+  margin-bottom: var(--spacing-lg, 1.5rem);
+  padding: 0 var(--spacing-sm, 0.5rem);
 }
 
 .new-chat-btn {
@@ -21,112 +32,92 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: var(--spacing-md) var(--spacing-lg);
-  background-color: var(--bg-main);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  padding: 12px 24px;
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
+  border: none;
   border-radius: var(--border-radius);
   text-decoration: none;
-  font-weight: 500;
-  font-size: var(--font-size-sm);
-  transition: var(--transition);
-  gap: var(--spacing-sm);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  transition: var(--transition-fast);
 }
 
 .new-chat-btn:hover {
-  background-color: var(--bg-secondary);
-  border-color: var(--primary);
+  background-color: var(--color-primary-hover);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Chat History
+/* -------------------------------------------------------------------------- */
 
 .chat-history {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-md) var(--spacing-lg);
+  margin-top: var(--spacing-lg, 1.5rem);
 }
 
 .history-title {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: var(--spacing-md);
-  padding: 0 var(--spacing-sm);
+  margin-bottom: var(--spacing-sm, 0.5rem);
+  padding: 0 var(--spacing-sm, 0.5rem);
 }
 
 .history-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 0.25rem; /* 4px */
 }
 
+/* UPDATED: Style the <li> container */
 .history-item {
   display: flex;
-  align-items: center;
-  border-radius: var(--border-radius);
-  transition: var(--transition);
-  position: relative;
+  border-radius: 6px;
+  transition: var(--transition-fast);
 }
 
-.history-item:hover {
-  background-color: var(--bg-secondary);
-}
-
-.history-item.active {
-  background-color: var(--primary);
-}
-
-.history-item.active a {
-  color: white;
-  font-weight: 500;
-}
-
+/* UPDATED: Style the <a> link inside the container */
 .history-item a {
-  flex: 1;
+  flex: 1; /* Make the link fill the container */
   display: block;
-  padding: var(--spacing-md);
-  color: var(--text-primary);
+  padding: 10px 8px;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.delete-chat-btn {
-  display: none;
-  width: 1.5rem;
-  height: 1.5rem;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 50%;
-  transition: var(--transition);
-  margin-right: var(--spacing-sm);
+/* UPDATED: Hover state on the <li> */
+.history-item:hover {
+  background-color: #E0E7EF;
 }
 
-.history-item:hover .delete-chat-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* UPDATED: Active state on the <li> */
+.history-item.active {
+  background-color: #DBEAFE;
 }
 
-.delete-chat-btn:hover {
-  background-color: #ef4444;
-  color: white;
+/* UPDATED: Style the link when its parent is active */
+.history-item.active a {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
 }
 
-/* Responsive behavior - hide on mobile, show on desktop */
+
+/* ==========================================================================
+   Responsive Behavior
+   ========================================================================== */
+
 @media (max-width: 767px) {
   .sidebar {
     display: none;
-  }
-}
-
-@media (min-width: 768px) {
-  .sidebar {
-    display: flex;
   }
 }

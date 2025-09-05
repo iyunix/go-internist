@@ -29,6 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("DB Error: %v", err)
 	}
+	// This will now migrate the User table with all our new fields (Status, LockedUntil, etc.)
 	if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
 		log.Fatalf("DB Migration Error: %v", err)
 	}
@@ -37,6 +38,7 @@ func main() {
 	userRepo := repository.NewGormUserRepository(db)
 	chatRepo := repository.NewChatRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
+	// REMOVED: verificationCodeRepo is no longer needed.
 
 	// --- Services ---
 	aiService := services.NewAIService(
@@ -58,9 +60,12 @@ func main() {
 
 	userService := services.NewUserService(userRepo, cfg.JWTSecretKey)
 	chatService := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService, cfg.RetrievalTopK)
-	
+	// NEW: Initialize our robust SMSService.
+	smsService := services.NewSMSService()
+
 	// --- Handlers ---
-	authHandler := handlers.NewAuthHandler(userService)
+	// CHANGED: Pass the SMSService to the AuthHandler.
+	authHandler := handlers.NewAuthHandler(userService, smsService)
 	chatHandler := handlers.NewChatHandler(userService, chatService)
 	pageHandler := handlers.NewPageHandler()
 
@@ -76,55 +81,88 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	}).Methods("GET")
-	
-	// CORRECTED AND MOVED HERE: Public endpoint for frontend logging
+
 	r.HandleFunc("/api/log", handlers.LogFrontendEvent).Methods("POST")
 
-	r.HandleFunc("/", pageHandler.ShowLoginPage).Methods("GET")
+	r.HandleFunc("/", pageHandler.ShowIndexPage).Methods("GET")
 	r.HandleFunc("/login", pageHandler.ShowLoginPage).Methods("GET")
 	r.HandleFunc("/register", pageHandler.ShowRegisterPage).Methods("GET")
 	r.HandleFunc("/login", authHandler.Login).Methods("POST")
 	r.HandleFunc("/register", authHandler.Register).Methods("POST")
+	r.HandleFunc("/logout", authHandler.Logout).Methods("GET")
+
+	// Verification Routes
+	r.HandleFunc("/verify-sms", authHandler.VerifySMS).Methods("POST")
+
+    // THIS IS THE NEW, CORRECT CODE
+    r.HandleFunc("/verify-sms", pageHandler.ShowVerifySMSPage).Methods("GET")
+    
+	// MOVED: The /resend-sms route is now correctly placed here.
+	r.HandleFunc("/resend-sms", authHandler.ResendSMS).Methods("GET")
 
 	// --- Protected Routes ---
 	protected := r.PathPrefix("/").Subrouter()
 	protected.Use(authMiddleware)
 	protected.HandleFunc("/chat", pageHandler.ShowChatPage).Methods("GET")
-	
+
 	api := protected.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
 	api.HandleFunc("/chats", chatHandler.CreateChat).Methods("POST")
 	api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
 	api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
 	api.HandleFunc("/chats/{id:[0-9]+}/stream", chatHandler.StreamChatSSE).Methods("GET")
+	
+	// --- Custom Error Handlers ---
+	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageHandler.ShowErrorPage(w, "404", "Page Not Found", "The page you are looking for does not exist.")
+	})
+	r.MethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageHandler.ShowErrorPage(w, "405", "Method Not Allowed", "The method is not allowed for this resource.")
+	})
+    // --- Server Configuration ---
+    port := ":8081"
+    if cfg.ServerPort != "" {
+        port = ":" + cfg.ServerPort
+    }
 
-	// --- Server Start and Graceful Shutdown ---
-	srv := &http.Server{
-	Addr:         ":8081",
-	Handler:      r,              // your mux
-	ReadTimeout:  0,                   // or generous, SSE reads little after headers
-	WriteTimeout: 0,                   // critical: disable or set very large for SSE
-	IdleTimeout:  0,                   // optional: disable for long-lived
-	}
-	log.Fatal(srv.ListenAndServe())
+    srv := &http.Server{
+        Addr:         port,
+        Handler:      r,
+        ReadTimeout:  0,                   // Disable for SSE
+        WriteTimeout: 0,                   // Disable for SSE
+        IdleTimeout:  0,                   // Disable for SSE
+    }
 
-	go func() {
-		log.Printf("Server is starting on port %s...", cfg.ServerPort)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("ListenAndServe error: %v", err)
-		}
-	}()
+    // --- Startup Logging ---
+    log.SetFlags(log.LstdFlags | log.Lshortfile)
+    log.Printf("==================================================")
+    log.Printf("🤖 Internist AI - Medical Chat Assistant")
+    log.Printf("==================================================")
+    log.Printf("🚀 Server starting on port %s", port)
+    log.Printf("🌐 Local access: http://localhost%s", port)
+    log.Printf("💬 Chat interface: http://localhost%s/chat", port)
+    log.Printf("📊 Health check: http://localhost%s/health", port)
+    log.Printf("🔄 Server ready to accept connections!")
+    log.Printf("==================================================")
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+    // --- Start Server in Goroutine ---
+    go func() {
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatalf("❌ Server startup failed: %v", err)
+        }
+    }()
 
-	log.Println("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+    // --- Graceful Shutdown ---
+    stop := make(chan os.Signal, 1)
+    signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+    <-stop
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server Shutdown Failed: %+v", err)
-	}
-	log.Println("Server stopped gracefully")
+    log.Println("🛑 Shutting down server gracefully...")
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+
+    if err := srv.Shutdown(ctx); err != nil {
+        log.Fatalf("❌ Server shutdown failed: %v", err)
+    }
+    log.Println("✅ Server stopped gracefully")
 }

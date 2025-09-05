@@ -1,25 +1,7 @@
-/* ==========================================================================
-   Chat Interface - Main Entry Point
-   ========================================================================== */
+/* File: web/static/css/main.css */
+/* This is the GLOBAL stylesheet for the whole application. */
 
-/* Base Styles */
+/* Base Styles - Needed Everywhere */
 @import url('./base/variables.css');
 @import url('./base/reset.css');
 @import url('./base/typography.css');
-
-/* Layout */
-@import url('./layout/grid.css');
-@import url('./layout/responsive.css');
-
-/* Components */
-@import url('./components/sidebar.css');
-@import url('./components/messages.css');
-@import url('./components/input-form.css');
-@import url('./components/skeleton.css');
-@import url('./components/history.css');
-
-/* Themes */
-@import url('./themes/dark.css');
-
-/* Animations */
-@import url('./animations/keyframes.css');

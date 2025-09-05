@@ -18,15 +18,20 @@ export const Utils = {
   // Throttle function calls
   throttle(func, limit) {
     let inThrottle;
-    return function() {
-      const args = arguments;
-      const context = this;
+    return function(...args) {
       if (!inThrottle) {
-        func.apply(context, args);
+        func.apply(this, args);
         inThrottle = true;
         setTimeout(() => inThrottle = false, limit);
       }
     };
+  },
+
+  // NEW: Centralized function to escape HTML and prevent XSS
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = String(text); // Ensure input is treated as a string
+    return div.innerHTML;
   },
 
   // Safe logging to server
@@ -42,6 +47,7 @@ export const Utils = {
 
   // Auto-scroll to bottom of container
   scrollToBottom(container, smooth = true) {
+    if (!container) return;
     if (smooth) {
       container.scrollTo({
         top: container.scrollHeight,

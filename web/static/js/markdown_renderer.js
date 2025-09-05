@@ -21,10 +21,78 @@
     breaks: true
   };
 
+  // ---- Footnote Support ----
+  const footnotes = {};
+
+  // Inline footnote references: [^id]
+  const footnoteRefExtension = {
+    name: "footnoteRef",
+    level: "inline",
+    start(src) {
+      return src.match(/\[\^/)?.index;
+    },
+    tokenizer(src) {
+      const rule = /^\[\^(.+?)\]/;
+      const match = rule.exec(src);
+      if (match) {
+        return {
+          type: "footnoteRef",
+          raw: match[0],
+          id: match[1]
+        };
+      }
+    },
+    renderer(token) {
+      const id = token.id.toLowerCase();
+      return `<sup id="fnref:${id}"><a href="#fn:${id}" class="footnote-ref">[${id}]</a></sup>`;
+    }
+  };
+
+  // Footnote definitions: [^id]: text
+  const footnoteDefExtension = {
+    name: "footnoteDef",
+    level: "block",
+    start(src) {
+      return src.match(/^\[\^.+?\]:/)?.index;
+    },
+    tokenizer(src) {
+      const rule = /^\[\^(.+?)\]: (.+)$/m;
+      const match = rule.exec(src);
+      if (match) {
+        footnotes[match[1].toLowerCase()] = match[2];
+        return {
+          type: "footnoteDef",
+          raw: match[0],
+          id: match[1],
+          text: match[2]
+        };
+      }
+    },
+    renderer() {
+      // Don’t render definition inline; will render at bottom later
+      return "";
+    }
+  };
+
+  function renderFootnoteSection() {
+    const keys = Object.keys(footnotes);
+    if (!keys.length) return "";
+    let out = '<section class="footnotes"><hr><ol>';
+    keys.forEach(id => {
+      const text = footnotes[id];
+      out += `<li id="fn:${id}">${text} <a href="#fnref:${id}" class="footnote-backref">↩</a></li>`;
+    });
+    out += "</ol></section>";
+    return out;
+  }
+
   // Initialize marked once with defaults; callers can override via MarkdownRenderer.configure
   function initMarked(opts) {
     if (typeof global.marked?.setOptions === 'function') {
       global.marked.setOptions({ ...defaultMarkedOptions, ...(opts || {}) });
+    }
+    if (typeof global.marked?.use === 'function') {
+      global.marked.use({ extensions: [footnoteRefExtension, footnoteDefExtension] });
     }
   }
 
@@ -32,8 +100,15 @@
   function renderMarkdownTo(targetEl, markdown) {
     assertDeps();
     const md = typeof markdown === 'string' ? markdown : '';
-    const html = global.marked.parse(md);
-    const safe = global.DOMPurify.sanitize(html);
+
+    // Reset footnote storage
+    for (const k in footnotes) delete footnotes[k];
+
+    const htmlMain = global.marked.parse(md);
+    const htmlFootnotes = renderFootnoteSection();
+    const fullHtml = htmlMain + htmlFootnotes;
+
+    const safe = global.DOMPurify.sanitize(fullHtml);
     targetEl.innerHTML = safe;
   }
 
@@ -49,28 +124,21 @@
 
     function doRender() {
       if (isDestroyed) return;
-      
       rafId = null;
-      
       try {
         renderMarkdownTo(targetEl, buffer);
-        
-        // Auto-scroll to bottom
         const scroller = targetEl.closest('.messages') || targetEl.parentElement;
         if (scroller) {
           scroller.scrollTop = scroller.scrollHeight;
         }
       } catch (err) {
         console.warn('MarkdownRenderer render error:', err);
-        // Fallback to plain text on render error
         targetEl.textContent = buffer;
       }
     }
 
     function scheduleRender(immediate = false) {
       if (isDestroyed) return;
-      
-      // Clear any existing scheduled renders
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
         rafId = null;
@@ -83,7 +151,6 @@
       if (immediate) {
         rafId = requestAnimationFrame(doRender);
       } else {
-        // Debounced render for smoother streaming
         timeoutId = setTimeout(() => {
           timeoutId = null;
           rafId = requestAnimationFrame(doRender);
@@ -94,37 +161,26 @@
     return {
       append(chunk) {
         if (isDestroyed || !chunk) return;
-        
         chunk = String(chunk);
         buffer += chunk;
-        
-        // Render immediately on newlines, otherwise debounce
         const hasNewline = chunk.includes('\n');
         scheduleRender(hasNewline);
       },
-      
       set(markdown) {
         if (isDestroyed) return;
-        
         buffer = String(markdown || '');
         scheduleRender(true);
       },
-      
       clear() {
         if (isDestroyed) return;
-        
         buffer = '';
         scheduleRender(true);
       },
-      
       get() {
         return buffer;
       },
-      
       flush() {
         if (isDestroyed) return;
-        
-        // Cancel any pending renders and do immediate final render
         if (rafId !== null) {
           cancelAnimationFrame(rafId);
           rafId = null;
@@ -133,13 +189,10 @@
           clearTimeout(timeoutId);
           timeoutId = null;
         }
-        
         doRender();
       },
-      
       destroy() {
         isDestroyed = true;
-        
         if (rafId !== null) {
           cancelAnimationFrame(rafId);
           rafId = null;
@@ -148,7 +201,6 @@
           clearTimeout(timeoutId);
           timeoutId = null;
         }
-        
         buffer = '';
       }
     };
@@ -156,17 +208,12 @@
 
   // Public API
   const MarkdownRenderer = {
-    // Configure marked options globally (e.g., { gfm: true, breaks: true })
     configure(markedOptions) {
       initMarked(markedOptions);
     },
-    
-    // One-shot render: convert Markdown to sanitized HTML in the given element
     render(targetEl, markdown) {
       renderMarkdownTo(targetEl, markdown);
     },
-    
-    // Create a streaming renderer bound to an element
     createStream(targetEl, options) {
       return createStreamRenderer(targetEl, options);
     }

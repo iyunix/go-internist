@@ -259,3 +259,112 @@ func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error
 func (s *ChatService) AddChatMessage(ctx context.Context, userID, chatID uint, content string) (string, domain.Chat, error) {
 	return "This is the non-streaming endpoint.", domain.Chat{}, nil
 }
+
+
+
+// ExtractSourceTitles extracts unique document titles from Pinecone matches
+func (s *ChatService) ExtractSourceTitles(matches []*pinecone.ScoredVector) []string {
+    var sources []string
+    seen := make(map[string]bool)
+
+    for _, match := range matches {
+        if match == nil || match.Vector == nil || match.Vector.Metadata == nil {
+            continue
+        }
+        
+        md := match.Vector.Metadata.GetFields()
+        
+        // Try to get title from different metadata fields
+        var title string
+        
+        // Priority: source_file > section_heading > chunk ID
+        if f, ok := md["source_file"]; ok {
+            title = strings.TrimSpace(f.GetStringValue())
+            // Clean up the filename - remove extension and path
+            title = strings.TrimSuffix(title, ".md")
+            title = strings.TrimSuffix(title, "_Drug_information")
+            title = strings.ReplaceAll(title, "_", " ")
+        }
+        
+        if title == "" {
+            if f, ok := md["section_heading"]; ok {
+                title = strings.TrimSpace(f.GetStringValue())
+            }
+        }
+        
+        if title == "" {
+            title = match.Vector.Id
+        }
+        
+        // Add unique titles only
+        if title != "" && !seen[title] {
+            sources = append(sources, title)
+            seen[title] = true
+        }
+    }
+    
+    return sources
+}
+
+// StreamChatMessageWithSources - Enhanced version that sends sources via callback
+func (s *ChatService) StreamChatMessageWithSources(
+    ctx context.Context,
+    userID, chatID uint,
+    prompt string,
+    onDelta func(token string) error,
+    onSources func(sources []string),
+) error {
+    chat, err := s.chatRepo.FindByID(ctx, chatID)
+    if err != nil || chat.UserID != userID {
+        return errors.New("chat not found or unauthorized")
+    }
+
+    // Save user message
+    userMessage := &domain.Message{ChatID: chatID, Role: "user", Content: prompt}
+    if _, err := s.messageRepo.Create(ctx, userMessage); err != nil {
+        return fmt.Errorf("failed to store user message: %w", err)
+    }
+    _ = s.chatRepo.TouchUpdatedAt(ctx, chatID)
+
+    // Get embedding and query Pinecone
+    embedding, err := s.aiService.CreateEmbedding(ctx, prompt)
+    if err != nil {
+        return fmt.Errorf("failed to create embedding: %w", err)
+    }
+    matches, err := s.pineconeService.QuerySimilar(ctx, embedding, s.retrievalTopK)
+    if err != nil {
+        return fmt.Errorf("failed to query pinecone: %w", err)
+    }
+
+    // Extract and send source titles to frontend
+    sources := s.ExtractSourceTitles(matches)
+    if len(sources) > 0 && onSources != nil {
+        onSources(sources)
+    }
+
+    // Build context and generate response
+    contextJSON := s.buildContextJSON(matches)
+    finalPrompt := s.buildFinalPrompt(contextJSON, prompt)
+
+    var fullReply strings.Builder
+    streamErr := s.aiService.StreamCompletion(ctx, "jabir-400b", finalPrompt, func(token string) error {
+        fullReply.WriteString(token)
+        return onDelta(token)
+    })
+    if streamErr != nil {
+        log.Printf("[ChatService] Error during AI stream: %v", streamErr)
+        return streamErr
+    }
+
+    // Save assistant message
+    go func() {
+        if fullReply.Len() > 0 {
+            assistantMessage := &domain.Message{ChatID: chatID, Role: "assistant", Content: fullReply.String()}
+            if _, err := s.messageRepo.Create(context.Background(), assistantMessage); err != nil {
+                log.Printf("Failed to save assistant message: %v", err)
+            }
+            _ = s.chatRepo.TouchUpdatedAt(context.Background(), chatID)
+        }
+    }()
+    return nil
+}

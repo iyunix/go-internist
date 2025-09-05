@@ -2,16 +2,44 @@
    Main Layout Grid
    ========================================================================== */
 
+/* The main container for the entire application interface.
+   Establishes the two-column layout. */
 .chat-layout {
   display: flex;
   height: 100vh;
   width: 100vw;
+  overflow: hidden; /* Prevents the whole page from scrolling */
+  background-color: var(--color-bg);
 }
 
+/* The sidebar column. Its width is fixed.
+   Specific styles like background and padding are in sidebar.css */
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0; /* Prevents the sidebar from shrinking */
+}
+
+/* The main content area that takes up the remaining space.
+   It's a vertical flex container for the message list and input form. */
 .chat-main {
-  flex: 1;
+  flex: 1; /* Allows this element to grow and fill available space */
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-main);
-  min-width: 0;
+  padding: 0; /* Padding will be handled by the inner wrapper */
+  min-width: 0; /* A flexbox fix to prevent content overflow */
+}
+
+/* The inner wrapper that centers the chat conversation.
+   This creates the max-width column for messages and the input form. */
+.chat-content-wrapper {
+  width: 100%;
+  max-width: var(--chat-content-max-width);
+  margin: 0 auto; /* Horizontally centers the wrapper */
+  padding: 0 1rem; /* Adds some space on the sides on smaller screens */
+  
+  /* This setup ensures the input form is pushed to the bottom */
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0;
 }

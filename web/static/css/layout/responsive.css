@@ -2,37 +2,54 @@
    Responsive Design
    ========================================================================== */
 
-@media (min-width: 768px) {
-  .sidebar {
-    display: flex;
+/* Tablet & Smaller Screens (e.g., Portrait iPads, large phones)
+   ========================================================================== */
+@media (max-width: 767px) {
+
+  /* The chat content should take up the full screen width */
+  .chat-content-wrapper {
+    max-width: 100%;
+    padding: 0 var(--spacing-md, 1rem); /* Add horizontal padding */
+  }
+
+  .message-item {
+    max-width: 90%; /* Allow messages to be a bit wider */
+  }
+
+  /* This is a placeholder for a future mobile header that could
+     contain the "New Chat" button and a menu icon. */
+  .mobile-header {
+    display: flex; /* Hidden by default on desktop */
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md, 1rem);
+    background-color: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
   }
 }
 
-@media (max-width: 767px) {
+
+/* Mobile Phones
+   ========================================================================== */
+@media (max-width: 480px) {
+
+  /* Reduce padding on the main messages area for more space */
   .messages {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md, 1rem) 0;
   }
   
-  .chat-header-main {
-    padding: var(--spacing-lg);
-  }
-  
-  .input-form-container {
-    padding: var(--spacing-lg);
-  }
-  
-  .msg {
+  .message-item {
     max-width: 95%;
   }
-}
 
-@media (max-width: 480px) {
-  .messages {
-    padding: var(--spacing-md);
-    gap: var(--spacing-lg);
+  /* As per the guidelines, stack the input form vertically */
+  .input-form {
+    flex-direction: column;
+    align-items: stretch; /* Make children full-width */
+    gap: 0.75rem; /* 12px */
   }
-  
-  .msg {
-    max-width: 100%;
+
+  .input-form button {
+    width: 100%; /* Make button full-width */
   }
 }
