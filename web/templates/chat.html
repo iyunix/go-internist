@@ -1,11 +1,13 @@
-{{template "layout.html" .}}
-
 {{define "styles"}}
     <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="/static/css/components/messages.css">
+    <link rel="stylesheet" href="/static/css/components/sidebar.css">
+    <link rel="stylesheet" href="/static/css/components/skeleton.css">
 {{end}}
 
 {{define "scripts"}}
     <script type="module" src="/static/js/chat/chat.js"></script>
+    <script src="/static/js/credit-manager.js"></script>
 {{end}}
 
 {{define "content"}}
@@ -17,20 +19,40 @@
             <a href="/logout" class="logout-btn">Logout</a>
         </div>
         
+        <!-- NEW: Credit Progress Bar Section -->
+        <div class="sidebar-credit">
+            <div class="credit-header">
+                <span class="credit-title">Credits</span>
+                <span class="credit-numbers">
+                    <span id="current-balance">2500</span>/<span class="total-balance">2500</span>
+                </span>
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-bar" id="credit-progress-bar">
+                    <div class="progress-fill" id="credit-progress-fill"></div>
+                    <span class="progress-text" id="credit-percentage">100%</span>
+                </div>
+            </div>
+            
+            <div class="credit-status" id="credit-status">
+                <span class="status-text good">Good standing</span>
+            </div>
+        </div>
+        
         <nav class="chat-history">
             <h3 class="history-title">Recent Chats</h3>
             <ul class="history-list" id="historyList">
-                </ul>
+                <!-- History skeleton will be inserted here by JS -->
+            </ul>
         </nav>
     </aside>
 
     <main class="chat-main">
         <div class="chat-content-wrapper">
             <ul class="messages" id="chatMessages">
-                </ul>
-
-            <div id="quickActions" class="quick-actions-container">
-                </div>
+                <!-- Messages skeleton will be inserted here by JS -->
+            </ul>
 
             <div class="input-form-container">
                 <form class="input-form" id="chatForm">
@@ -49,4 +71,28 @@
         </div>
     </main>
 </div>
+
+<!-- Add this script to handle skeleton removal -->
+<script>
+// Ensure skeleton is removed on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Hide any visible skeletons
+    const skeletons = document.querySelectorAll('.skeleton-container, .skeleton, [class*="skeleton"]');
+    skeletons.forEach(skeleton => {
+        if (skeleton.style.display !== 'none') {
+            skeleton.style.display = 'none';
+        }
+    });
+    
+    // Remove skeleton classes
+    const elementsWithSkeletonClass = document.querySelectorAll('[class*="skeleton"]');
+    elementsWithSkeletonClass.forEach(element => {
+        element.classList.forEach(className => {
+            if (className.includes('skeleton') && className !== 'skeleton-container') {
+                element.classList.remove(className);
+            }
+        });
+    });
+});
+</script>
 {{end}}

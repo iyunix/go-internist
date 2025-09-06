@@ -82,6 +82,50 @@ func (r *gormUserRepository) ResetFailedAttempts(ctx context.Context, id uint) e
 	return nil
 }
 
+// NEW: GetCharacterBalance retrieves a user's current character balance.
+func (r *gormUserRepository) GetCharacterBalance(ctx context.Context, userID uint) (int, error) {
+	var balance int
+	err := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Select("character_balance").Scan(&balance).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, ErrUserNotFound
+		}
+		log.Printf("[UserRepository] GetCharacterBalance error for user ID %d: %v", userID, err)
+		return 0, errors.New("database error getting character balance")
+	}
+	return balance, nil
+}
+
+// NEW: UpdateCharacterBalance updates a user's character balance.
+func (r *gormUserRepository) UpdateCharacterBalance(ctx context.Context, userID uint, newBalance int) error {
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("character_balance", newBalance)
+
+	if result.Error != nil {
+		log.Printf("[UserRepository] UpdateCharacterBalance error for user ID %d: %v", userID, result.Error)
+		return errors.New("database error updating character balance")
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+// --- ADD THIS NEW FUNCTION ---
+// FindAll retrieves all users from the database for the admin panel.
+func (r *gormUserRepository) FindAll(ctx context.Context) ([]domain.User, error) {
+	var users []domain.User
+	// We order by ID to ensure a consistent, predictable order.
+	if err := r.db.WithContext(ctx).Order("id asc").Find(&users).Error; err != nil {
+		log.Printf("[UserRepository] FindAll error: %v", err)
+		return nil, errors.New("database error retrieving all users")
+	}
+	return users, nil
+}
+// --- END OF NEW FUNCTION ---
+
 // NEW: handleFindError is a helper to reduce repetitive error handling code.
 func (r *gormUserRepository) handleFindError(err error, user *domain.User, methodName string, identifier interface{}) (*domain.User, error) {
 	if err != nil {

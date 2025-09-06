@@ -12,8 +12,5 @@
 @import url('./components/skeleton.css');
 @import url('./components/footnotes.css');
 
-/* Themes */
-@import url('./themes/dark.css');
-
 /* Animations */
 @import url('./animations/keyframes.css');

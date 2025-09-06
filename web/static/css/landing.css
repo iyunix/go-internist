@@ -1,12 +1,12 @@
 .landing-contact {
-  background: #fff;
+  background: var(--color-surface);
   padding: 2rem 1rem;
   text-align: center;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-border);
 }
 .contact-container h3 {
   font-size: 1.3rem;
-  color: #2563eb;
+  color: var(--color-primary);
   margin-bottom: 1rem;
 }
 .contact-icons {
@@ -25,7 +25,7 @@
   transition: filter 0.2s;
 }
 .contact-icons a {
-  color: #334155;
+  color: var(--color-text-secondary);
   font-weight: 500;
   text-decoration: none;
   font-size: 1rem;
@@ -36,7 +36,7 @@
   filter: none;
 }
 .poem-blue {
-  color: #3b82f6;
+  color: var(--info);
   font-weight: 500;
   transition: color 0.2s;
 }
@@ -46,7 +46,7 @@
   align-items: center;
   justify-content: center;
   min-height: 60vh;
-  background: linear-gradient(120deg, #f9fafb 60%, #e0e7ff 100%);
+  background: linear-gradient(120deg, var(--color-bg) 60%, var(--color-primary-hover) 100%);
   padding: 3rem 1rem 2rem 1rem;
 }
 .landing-container {
@@ -57,7 +57,7 @@
 .landing-title {
   font-size: 2.5rem;
   font-weight: 800;
-  color: #2563eb;
+  color: var(--color-primary);
   margin-bottom: 1rem;
   font-family: "Inter", system-ui, sans-serif;
 }
@@ -69,14 +69,14 @@
 }
 .landing-poem {
   font-size: 1.25rem;
-  color: #334155;
+  color: var(--color-text-secondary);
   margin-bottom: 2rem;
   font-style: italic;
 }
 .landing-btn {
   display: inline-block;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
   font-weight: 600;
   padding: 0.75rem 2rem;
   border-radius: 8px;
@@ -85,7 +85,7 @@
   transition: background 0.2s, transform 0.2s;
 }
 .landing-btn:hover {
-  background: #1d4ed8;
+  background: var(--color-primary-hover);
   transform: scale(1.05);
 }
 .landing-features {
@@ -93,11 +93,11 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 2rem;
-  background: #fff;
+  background: var(--color-surface);
   padding: 3rem 1rem;
 }
 .feature {
-  background: #f9fafb;
+  background: var(--color-bg);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.03);
   padding: 2rem 1.5rem;
@@ -105,16 +105,16 @@
   text-align: center;
 }
 .feature h2 {
-  color: #2563eb;
+  color: var(--color-primary);
   font-size: 1.3rem;
   margin-bottom: 0.5rem;
 }
 .feature p {
-  color: #334155;
+  color: var(--color-text-secondary);
   font-size: 1rem;
 }
 .landing-cta {
-  background: linear-gradient(90deg, #e0e7ff 0%, #f9fafb 100%);
+  background: linear-gradient(90deg, var(--color-primary-hover) 0%, var(--color-bg) 100%);
   padding: 3rem 1rem;
   text-align: center;
 }
@@ -124,17 +124,17 @@
 }
 .cta-container h2 {
   font-size: 2rem;
-  color: #2563eb;
+  color: var(--color-primary);
   margin-bottom: 1rem;
 }
 .cta-container p {
-  color: #334155;
+  color: var(--color-text-secondary);
   font-size: 1.1rem;
   margin-bottom: 2rem;
 }
 .cta-container .btn {
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
   font-weight: 600;
   padding: 0.75rem 2rem;
   border-radius: 8px;
@@ -143,7 +143,7 @@
   transition: background 0.2s, transform 0.2s;
 }
 .cta-container .btn:hover {
-  background: #1d4ed8;
+  background: var(--color-primary-hover);
   transform: scale(1.05);
 }
 @media (max-width: 900px) {

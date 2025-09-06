@@ -1,0 +1,50 @@
+{{define "title"}}Admin Panel{{end}}
+
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/admin.css">
+{{end}}
+
+{{define "scripts"}}
+    <script type="module" src="/static/js/admin.js"></script>
+{{end}}
+
+{{define "content"}}
+<div class="admin-container">
+    <header class="admin-header">
+        <h1>Admin Panel</h1>
+        <div class="admin-header-actions">
+            <a href="/api/admin/users/export" class="export-link">Export as CSV</a>
+            <a href="/chat" class="nav-link">← Back to Chat</a>
+        </div>
+    </header>
+
+    <main class="user-management-section">
+        <h2>User Management</h2>
+
+        <div class="toolbar">
+            <input type="search" id="user-search-input" placeholder="Search by username or phone...">
+        </div>
+        
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Phone Number</th>
+                        <th>Current Balance</th>
+                        <th>Total Balance</th>
+                        <th>Is Admin?</th>
+                        <th class="actions-column">Add Credits</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table-body">
+                    <tr id="loading-row">
+                        <td colspan="7">Loading users...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+{{end}}

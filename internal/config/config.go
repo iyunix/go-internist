@@ -15,12 +15,12 @@ type Config struct {
 	JWTSecretKey          string
 	AvalaiAPIKeyEmbedding string
 	JabirAPIKey           string
-	// NEW: The name of the model to use for creating embeddings.
-	EmbeddingModelName string
+	EmbeddingModelName    string
 	PineconeAPIKey        string
 	PineconeIndexHost     string
 	PineconeNamespace     string
 	RetrievalTopK         int
+	AdminPhoneNumber      string // <-- ADD THIS
 	Environment           string
 }
 
@@ -38,13 +38,12 @@ func Load() *Config {
 		JWTSecretKey:          getEnv("JWT_SECRET_KEY", ""),
 		AvalaiAPIKeyEmbedding: getEnv("AVALAI_API_KEY_EMBEDDING", ""),
 		JabirAPIKey:           getEnv("JABIR_API_KEY", ""),
-		// Load the embedding model name, defaulting to a common one.
-		// IMPORTANT: This should be set in the .env file to match your index.
 		EmbeddingModelName:    getEnv("EMBEDDING_MODEL_NAME", "text-embedding-ada-002"),
 		PineconeAPIKey:        getEnv("PINECONE_API_KEY", ""),
 		PineconeIndexHost:     getEnv("PINECONE_INDEX_HOST", ""),
 		PineconeNamespace:     getEnv("PINECONE_NAMESPACE", "UpToDate"),
-		RetrievalTopK:         getEnvAsInt("RAG_TOPK", 8), // Default to 8
+		RetrievalTopK:         getEnvAsInt("RAG_TOPK", 8),
+		AdminPhoneNumber:      getEnv("ADMIN_PHONE_NUMBER", ""), // <-- AND ADD THIS
 		Environment:           env,
 	}
 

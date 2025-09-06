@@ -1,43 +1,40 @@
-/* ==========================================================================
-   Source Footnotes Component
-   ========================================================================== */
+/* File: web/static/css/components/footnotes.css */
+/* Styling for message footnotes and sources */
 
-/* The main container for the source list, appearing below a message bubble. */
 .message-footnote {
-  margin-top: 1rem; /* Space between the message bubble and the footnote */
-  padding-top: 1rem;
-  border-top: 1px solid var(--color-border);
+    margin-top: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 0.875rem;
 }
 
-.footnote-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem; /* 8px space between title and items */
+.message-footnote h6 {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-/* The "Sources:" title */
-.footnote-title {
-  font-size: var(--font-size-sm); /* 14px */
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
+.message-footnote ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    list-style-type: decimal;
 }
 
-/* Container for the individual source items to allow wrapping */
-.footnote-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem; /* 8px */
+.message-footnote li {
+    margin-bottom: 4px;
+    color: #6b7280;
+    line-height: 1.4;
 }
 
-/* Individual source item, styled as a "pill" or "tag" */
-.footnote-item {
-  display: inline-block;
-  padding: 4px 10px;
-  font-size: var(--font-size-xs); /* 12px */
-  font-weight: var(--font-weight-medium);
-  background-color: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 9999px; /* Fully rounded pill shape */
-  color: var(--color-text-secondary);
-  line-height: 1.4;
+.sources-footnote {
+    margin-top: 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-left: 4px solid #3b82f6;
+    border-radius: 0 8px 8px 0;
 }

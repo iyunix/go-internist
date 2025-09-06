@@ -23,13 +23,29 @@ type ChatService struct {
 	retrievalTopK   int
 }
 
+
 func NewChatService(
 	chatRepo repository.ChatRepository,
 	messageRepo repository.MessageRepository,
 	aiService *AIService,
 	pineconeService *PineconeService,
 	retrievalTopK int,
-) *ChatService {
+) (*ChatService, error) { // Changed to return (*ChatService, error)
+	// --- ADDED VALIDATION ---
+	if chatRepo == nil {
+		return nil, errors.New("chat repository is required")
+	}
+	if messageRepo == nil {
+		return nil, errors.New("message repository is required")
+	}
+	if aiService == nil {
+		return nil, errors.New("ai service is required")
+	}
+	if pineconeService == nil {
+		return nil, errors.New("pinecone service is required")
+	}
+	// --- END ADDED VALIDATION ---
+
 	if retrievalTopK <= 0 {
 		retrievalTopK = 8
 	}
@@ -39,7 +55,7 @@ func NewChatService(
 		aiService:       aiService,
 		pineconeService: pineconeService,
 		retrievalTopK:   retrievalTopK,
-	}
+	}, nil // Return the service and a nil error on success
 }
 
 // CreateChat creates a new chat record in the database.

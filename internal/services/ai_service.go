@@ -21,8 +21,19 @@ type AIService struct {
 	maxRetries         int
 }
 
+// ========== MODIFIED FUNCTION START ==========
+
 // NewAIService initializes AIService with separate clients for embeddings and LLM.
-func NewAIService(embeddingKey, llmKey, embeddingBaseURL, llmBaseURL, embeddingModelName string) *AIService {
+func NewAIService(embeddingKey, llmKey, embeddingBaseURL, llmBaseURL, embeddingModelName string) (*AIService, error) {
+	// --- ADDED VALIDATION ---
+	if llmKey == "" {
+		return nil, errors.New("LLM API key is required but was not provided")
+	}
+	if embeddingKey == "" {
+		return nil, errors.New("embedding API key is required but was not provided")
+	}
+	// --- END ADDED VALIDATION ---
+
 	embeddingConfig := openai.DefaultConfig(embeddingKey)
 	if embeddingBaseURL != "" {
 		embeddingConfig.BaseURL = embeddingBaseURL
@@ -39,8 +50,10 @@ func NewAIService(embeddingKey, llmKey, embeddingBaseURL, llmBaseURL, embeddingM
 		embeddingModelName: embeddingModelName,
 		timeout:            60 * time.Second,
 		maxRetries:         3,
-	}
+	}, nil // Return the service and a nil error on success
 }
+
+// ========== MODIFIED FUNCTION END ==========
 
 // systemJSONGuard enforces strict JSON output from the model.
 func systemJSONGuard() string {
@@ -49,6 +62,11 @@ func systemJSONGuard() string {
 
 // GetCompletion returns a non-streamed chat completion from the LLM.
 func (s *AIService) GetCompletion(ctx context.Context, model, prompt string) (string, error) {
+	// --- ADDED NIL CHECK ---
+	if s == nil || s.llmClient == nil {
+		return "", errors.New("AIService or its llmClient is not initialized")
+	}
+	// --- END NIL CHECK ---
 	var reply string
 	err := s.retryWithTimeout(func(ctx context.Context) error {
 		req := openai.ChatCompletionRequest{
@@ -82,6 +100,11 @@ func (s *AIService) GetCompletion(ctx context.Context, model, prompt string) (st
 
 // CreateEmbedding generates an embedding vector for the given text.
 func (s *AIService) CreateEmbedding(ctx context.Context, text string) ([]float32, error) {
+	// --- ADDED NIL CHECK ---
+	if s == nil || s.embeddingClient == nil {
+		return nil, errors.New("AIService or its embeddingClient is not initialized")
+	}
+	// --- END NIL CHECK ---
 	var embedding []float32
 	err := s.retryWithTimeout(func(ctx context.Context) error {
 		req := openai.EmbeddingRequest{
@@ -107,25 +130,26 @@ func (s *AIService) CreateEmbedding(ctx context.Context, text string) ([]float32
 
 // StreamCompletion streams the LLM's response in chunks, calling onDelta for each chunk.
 func (s *AIService) StreamCompletion(ctx context.Context, model, prompt string, onDelta func(string) error) error {
+	// --- ADDED NIL CHECK ---
+	if s == nil || s.llmClient == nil {
+		return errors.New("AIService or its llmClient is not initialized")
+	}
+	// --- END NIL CHECK ---
 	req := openai.ChatCompletionRequest{
 		Model:  model,
 		Stream: true,
 		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: systemJSONGuard()},
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},
 		Temperature: 0.1,
 		TopP:        0.9,
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
 	}
 
 	stream, err := s.llmClient.CreateChatCompletionStream(ctx, req)
 	if err != nil {
 		var apiErr *openai.APIError
 		if errors.As(err, &apiErr) {
-			log.Printf("[AIService] OpenAI API Error: status=%d type=%s message=%s", apiErr.HTTPStatusCode, apiErr.Type, apiErr.Message)
+			log.Printf("[AIService] OpenAI API Error on stream creation: status=%d type=%s message=%s", apiErr.HTTPStatusCode, apiErr.Type, apiErr.Message)
 		}
 		return fmt.Errorf("failed to create completion stream: %w", err)
 	}
@@ -137,11 +161,15 @@ func (s *AIService) StreamCompletion(ctx context.Context, model, prompt string, 
 			return nil
 		}
 		if err != nil {
+			var apiErr *openai.APIError
+			if errors.As(err, &apiErr) {
+				log.Printf("[AIService] OpenAI API Error during stream receive: status=%d type=%s message=%s", apiErr.HTTPStatusCode, apiErr.Type, apiErr.Message)
+			}
 			return fmt.Errorf("stream receive error: %w", err)
 		}
 
-		for _, choice := range resp.Choices {
-			if delta := choice.Delta.Content; delta != "" && onDelta != nil {
+		if len(resp.Choices) > 0 {
+			if delta := resp.Choices[0].Delta.Content; delta != "" && onDelta != nil {
 				if cbErr := onDelta(delta); cbErr != nil {
 					return cbErr
 				}

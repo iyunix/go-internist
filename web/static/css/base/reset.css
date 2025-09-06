@@ -8,13 +8,15 @@
   padding: 0;
 }
 
-html, body {
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden; /* App layout handles scrolling */
+html {
+  height: 100%;
 }
 
 body {
+  /* FIXED: Removed problematic overflow and viewport units */
+  min-height: 100vh;
+  width: 100%;
+  
   /* UPDATED: Using official design system variables */
   font-family: var(--font-primary);
   font-size: var(--font-size-base);

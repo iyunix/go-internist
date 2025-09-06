@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/iyunix/go-internist/internal/domain"
 	"github.com/iyunix/go-internist/internal/services"
+	"github.com/iyunix/go-internist/internal/services/user_services"
 )
 
 var (
@@ -23,20 +25,26 @@ var (
 
 // AuthHandler holds the dependencies for authentication handlers.
 type AuthHandler struct {
-	UserService *services.UserService
-	SMSService  *services.SMSService
+	UserService    *user_services.UserService
+	SMSService     *services.SMSService
+	BalanceService *user_services.BalanceService
 }
 
-
-// This is the correct version
-func NewAuthHandler(userService *services.UserService, smsService *services.SMSService) *AuthHandler {
-    return &AuthHandler{
-        UserService: userService, // Use the userService that was passed in
-        SMSService:  smsService,  // Use the smsService that was passed in
-    }
+// NewAuthHandler creates a new AuthHandler.
+func NewAuthHandler(
+	userService *user_services.UserService,
+	smsService *services.SMSService,
+	balanceService *user_services.BalanceService,
+) *AuthHandler {
+	return &AuthHandler{
+		UserService:    userService,
+		SMSService:     smsService,
+		BalanceService: balanceService,
+	}
 }
 
-// Register handles new user registrations by orchestrating validation, verification, and user creation.
+// --- All handlers from Register to Logout remain unchanged ---
+
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -54,7 +62,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a cryptographically secure 6-digit code.
 	code, err := generateSecureCode()
 	if err != nil {
 		log.Printf("Failed to generate secure code: %v", err)
@@ -63,10 +70,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delegate temporary storage and logic to the service layer.
-	// The service should handle hashing the password and storing user data in a "pending" state.
 	pendingUser := &domain.User{Username: username, PhoneNumber: phone, Password: password}
-	verificationTTL := 10 * time.Minute // Codes are valid for 10 minutes
+	verificationTTL := 10 * time.Minute
 
 	if err := h.UserService.InitiateVerification(r.Context(), pendingUser, code, verificationTTL); err != nil {
 		log.Printf("Failed to initiate verification: %v", err)
@@ -75,20 +80,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the SMS via the SMS service.
-    if err := h.SMSService.SendVerificationCode(r.Context(), phone, code); err != nil {
+	if err := h.SMSService.SendVerificationCode(r.Context(), phone, code); err != nil {
 		log.Printf("SMS send error: %v", err)
 		data := convertToInterfaceMap(map[string]string{"Error": "Failed to send SMS. Please try again."})
 		renderTemplate(w, "register.html", data)
 		return
 	}
 
-	// Redirect to the verification page on success.
 	data := map[string]interface{}{"PhoneNumber": phone}
 	renderTemplate(w, "verify_sms.html", data)
 }
 
-// VerifySMS handles code verification and finalizes registration.
 func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -97,8 +99,6 @@ func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
 	phone := r.FormValue("phone_number")
 	code := r.FormValue("sms_code")
 
-	// Delegate the core verification logic to the user service.
-	// This service method should check the code, ensure it's not expired, and finalize the user.
 	if _, err := h.UserService.FinalizeVerification(r.Context(), phone, code); err != nil {
 		log.Printf("Verification error: %v", err)
 		data := map[string]interface{}{"Error": err.Error(), "PhoneNumber": phone}
@@ -106,11 +106,9 @@ func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// On successful verification, redirect to the login page.
 	http.Redirect(w, r, "/login?verified=true", http.StatusSeeOther)
 }
 
-// ResendSMS handles resending the verification code.
 func (h *AuthHandler) ResendSMS(w http.ResponseWriter, r *http.Request) {
 	phone := r.URL.Query().Get("phone")
 	if !phoneRegex.MatchString(phone) {
@@ -119,7 +117,6 @@ func (h *AuthHandler) ResendSMS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a new secure code for the resend attempt.
 	code, err := generateSecureCode()
 	if err != nil {
 		log.Printf("Failed to generate secure code for resend: %v", err)
@@ -130,8 +127,6 @@ func (h *AuthHandler) ResendSMS(w http.ResponseWriter, r *http.Request) {
 
 	verificationTTL := 10 * time.Minute
 
-	// Delegate the resend logic to the service.
-	// The service should check if there is a pending user and if a resend is allowed (e.g., rate-limiting).
 	if err := h.UserService.ResendVerificationCode(r.Context(), phone, code, verificationTTL); err != nil {
 		log.Printf("SMS resend logic error: %v", err)
 		data := map[string]interface{}{"Error": err.Error(), "PhoneNumber": phone}
@@ -139,15 +134,13 @@ func (h *AuthHandler) ResendSMS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the new code via the SMS service.
-    if err := h.SMSService.SendVerificationCode(r.Context(), phone, code); err != nil {
+	if err := h.SMSService.SendVerificationCode(r.Context(), phone, code); err != nil {
 		log.Printf("SMS resend send error: %v", err)
 		data := map[string]interface{}{"Error": "Failed to resend SMS. Please try again.", "PhoneNumber": phone}
 		renderTemplate(w, "verify_sms.html", data)
 		return
 	}
 
-	// Let the user know the code has been successfully resent.
 	data := map[string]interface{}{
 		"PhoneNumber": phone,
 		"Success":     "A new verification code has been sent.",
@@ -155,7 +148,6 @@ func (h *AuthHandler) ResendSMS(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "verify_sms.html", data)
 }
 
-// Login validates user credentials, sets auth cookies, and redirects to chat.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -183,39 +175,69 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Expires:  time.Now().Add(24 * time.Hour),
 		HttpOnly: true,
-		Secure:   true, // Set to false if not using HTTPS in local dev
+		Secure:   false, // Set to false for local HTTP development
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/chat", http.StatusSeeOther)
 }
 
-// Logout clears the auth_token cookie and redirects to login.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    "",
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
-		Secure:   true, // Set to false if not using HTTPS in local dev
+		Secure:   false, // Set to false for local HTTP development
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// generateSecureCode creates a cryptographically secure 6-digit code.
+
+// --- THIS FUNCTION HAS BEEN UPDATED ---
+// GetUserCreditHandler handles the API request for the user's credit balance.
+func (h *AuthHandler) GetUserCreditHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(uint)
+	if !ok {
+		http.Error(w, "Authentication error: User ID not found in context", http.StatusUnauthorized)
+		return
+	}
+
+	// UPDATED: Call the new service function to get both current and total balance.
+	currentBalance, totalBalance, err := h.BalanceService.GetUserBalanceInfo(r.Context(), userID)
+	if err != nil {
+		log.Printf("Error getting user balance info for user %d: %v", userID, err)
+		http.Error(w, "Failed to retrieve user credit", http.StatusInternalServerError)
+		return
+	}
+
+	// UPDATED: The response now uses the dynamic values fetched from the database.
+	response := struct {
+		Balance      int `json:"balance"`
+		TotalCredits int `json:"totalCredits"`
+	}{
+		Balance:      currentBalance,
+		TotalCredits: totalBalance,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// --- Helper functions remain unchanged ---
+
 func generateSecureCode() (string, error) {
 	var b [6]byte
 	if _, err := io.ReadFull(rand.Reader, b[:]); err != nil {
 		return "", err
 	}
-	// A simple way to get a 6-digit number from random bytes.
 	code := (int(b[0])<<40 + int(b[1])<<32 + int(b[2])<<24 + int(b[3])<<16 + int(b[4])<<8 + int(b[5])) % 1000000
 	return fmt.Sprintf("%06d", code), nil
 }
 
-// validateInput ensures that username, phone, and password meet basic rules.
 func validateInput(username, phone, password string) (string, string, string, string) {
 	username = strings.TrimSpace(username)
 	phone = strings.TrimSpace(phone)
@@ -233,7 +255,6 @@ func validateInput(username, phone, password string) (string, string, string, st
 	return username, phone, password, errMsg
 }
 
-// convertToInterfaceMap transforms map[string]string into map[string]interface{}.
 func convertToInterfaceMap(strMap map[string]string) map[string]interface{} {
 	ifaceMap := make(map[string]interface{}, len(strMap))
 	for k, v := range strMap {

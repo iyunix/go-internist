@@ -1,8 +1,39 @@
 /* ==========================================================================
-   Typography Styles for Markdown Content
+   Typography Styles - Chat Interface & Markdown Content
    ========================================================================== */
 
-/* UPDATED: Selectors now target elements inside .message-bubble */
+/* Chat Interface Typography Hierarchy */
+.chat-title { 
+    font-size: 1.5rem; 
+    font-weight: 700; 
+    color: #1a1a1a; 
+}
+
+.message-user { 
+    font-size: 1rem; 
+    font-weight: 500; 
+    color: #333; 
+}
+
+.message-ai { 
+    font-size: 1rem; 
+    font-weight: 400; 
+    color: #2c3e50; 
+}
+
+.system-message { 
+    font-size: 0.875rem; 
+    font-style: italic; 
+    color: #666; 
+    background: #f8f9fa; 
+}
+
+.disclaimer { 
+    font-size: 0.75rem; 
+    color: #888; 
+}
+
+/* Markdown Content Styling Inside Messages */
 .message-bubble h1, 
 .message-bubble h2, 
 .message-bubble h3, 
@@ -32,9 +63,11 @@
   margin: var(--spacing-md, 1rem) 0;
   line-height: var(--line-height-normal);
 }
+
 .message-bubble p:first-child {
   margin-top: 0;
 }
+
 .message-bubble p:last-child {
   margin-bottom: 0;
 }
@@ -43,7 +76,7 @@
   background-color: var(--code-bg);
   color: var(--code-text);
   padding: 0.125rem 0.25rem;
-  border-radius: 4px; /* A smaller radius for inline elements */
+  border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 0.875em;
 }
@@ -60,7 +93,6 @@
   line-height: 1.4;
 }
 
-/* Reset styles for code blocks inside a <pre> tag */
 .message-bubble pre code {
   background: none;
   padding: 0;
