@@ -5,6 +5,7 @@ import (
     "context"
     "errors"
     "fmt"
+    "regexp"  // ← Add this import for validation
     "time"
 
     "github.com/golang-jwt/jwt/v5"
@@ -13,7 +14,6 @@ import (
     "github.com/iyunix/go-internist/internal/repository/user"
 )
 
-// FIXED: Remove duplicate declaration, keep only one
 type AuthService struct {
     userRepo     user.UserRepository
     jwtSecretKey string
@@ -21,7 +21,6 @@ type AuthService struct {
     logger       Logger
 }
 
-// NewAuthService creates a new authentication service
 func NewAuthService(userRepo user.UserRepository, jwtSecretKey, adminPhone string, logger Logger) *AuthService {
     return &AuthService{
         userRepo:     userRepo,
@@ -31,7 +30,7 @@ func NewAuthService(userRepo user.UserRepository, jwtSecretKey, adminPhone strin
     }
 }
 
-// Login authenticates a user and returns a JWT token - FIXED: Now uses username instead of phone
+// Login authenticates a user and returns a JWT token
 func (s *AuthService) Login(ctx context.Context, username, password string) (*domain.User, string, error) {
     if username == "" || password == "" {
         s.logger.Warn("login attempt with empty credentials", 
@@ -44,7 +43,6 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*do
         "username", username[:min(4, len(username))]+"****",
         "username_length", len(username))
 
-    // FIXED: Use FindByUsername method instead of FindByPhone
     user, err := s.userRepo.FindByUsername(ctx, username)
     if err != nil {
         s.logger.Warn("login failed - user not found", 
@@ -89,68 +87,101 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*do
     return user, token, nil
 }
 
-// Register creates a new user account - keeps phone for registration as intended
-func (s *AuthService) Register(ctx context.Context, phone, password string) (*domain.User, error) {
-    if phone == "" || password == "" {
-        s.logger.Warn("registration attempt with empty credentials",
-            "has_phone", phone != "",
-            "has_password", password != "")
-        return nil, errors.New("phone and password are required")
-    }
-
-    if len(password) < 6 {
-        s.logger.Warn("registration attempt with weak password",
+// ✅ FIXED: Register now accepts username as first parameter
+func (s *AuthService) Register(ctx context.Context, username, phone, password string) (*domain.User, error) {
+    // ✅ Validate all inputs
+    if err := s.validateRegistrationInput(username, phone, password); err != nil {
+        s.logger.Warn("registration validation failed", 
+            "username", username[:min(4, len(username))]+"****",
             "phone", phone[:min(4, len(phone))]+"****",
-            "password_length", len(password))
-        return nil, errors.New("password must be at least 6 characters")
+            "error", err.Error())
+        return nil, fmt.Errorf("validation failed: %w", err)
     }
 
     s.logger.Info("user registration attempt", 
+        "username", username[:min(4, len(username))]+"****",
         "phone", phone[:min(4, len(phone))]+"****")
 
-    // Check if user already exists
+    // ✅ Check if user already exists by phone
     existingUser, err := s.userRepo.FindByPhone(ctx, phone)
     if err == nil && existingUser != nil {
-        s.logger.Warn("registration failed - user already exists", 
+        s.logger.Warn("registration failed - phone already exists", 
             "phone", phone[:min(4, len(phone))]+"****",
             "existing_user_id", existingUser.ID)
         return nil, errors.New("user with this phone number already exists")
     }
 
-    // Hash password
+    // ✅ Check if username already exists
+    existingUser, err = s.userRepo.FindByUsername(ctx, username)
+    if err == nil && existingUser != nil {
+        s.logger.Warn("registration failed - username already exists", 
+            "username", username[:min(4, len(username))]+"****",
+            "existing_user_id", existingUser.ID)
+        return nil, errors.New("username already taken")
+    }
+
+    // ✅ Hash password
     hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
     if err != nil {
         s.logger.Error("password hashing failed", 
             "error", err,
+            "username", username[:min(4, len(username))]+"****",
             "phone", phone[:min(4, len(phone))]+"****")
         return nil, fmt.Errorf("failed to hash password: %w", err)
     }
 
-    // Use correct field names
+    // ✅ Create user with ALL required fields including username
     user := &domain.User{
+        Username:              username,                              // ✅ Username included from start
         PhoneNumber:           phone,
         Password:              string(hashedPassword),
         IsAdmin:               phone == s.adminPhone,
         SubscriptionPlan:      domain.PlanBasic,
         CharacterBalance:      domain.PlanCredits[domain.PlanBasic],
         TotalCharacterBalance: domain.PlanCredits[domain.PlanBasic],
+        Status:               domain.UserStatusPending,               // Assuming you have this field
     }
 
+    // ✅ Create user in database
     createdUser, err := s.userRepo.Create(ctx, user)
     if err != nil {
         s.logger.Error("user creation failed", 
             "error", err,
+            "username", username[:min(4, len(username))]+"****",
             "phone", phone[:min(4, len(phone))]+"****")
         return nil, fmt.Errorf("failed to create user: %w", err)
     }
 
     s.logger.Info("user registered successfully", 
+        "username", username[:min(4, len(username))]+"****",
         "phone", phone[:min(4, len(phone))]+"****",
         "user_id", createdUser.ID,
         "is_admin", createdUser.IsAdmin,
         "initial_balance", createdUser.CharacterBalance)
 
     return createdUser, nil
+}
+
+// ✅ NEW: Validation helper method
+func (s *AuthService) validateRegistrationInput(username, phone, password string) error {
+    // Validate username (same regex as handler)
+    usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
+    if !usernameRegex.MatchString(username) {
+        return fmt.Errorf("username validation: username must be 3-20 characters, alphanumeric or underscore")
+    }
+
+    // Validate phone
+    phoneRegex := regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+    if !phoneRegex.MatchString(phone) {
+        return fmt.Errorf("phone validation: invalid phone number format")
+    }
+
+    // Validate password (updated to match handler requirement)
+    if len(password) < 8 {
+        return fmt.Errorf("password validation: password must be at least 8 characters")
+    }
+
+    return nil
 }
 
 // ValidateJWTToken validates a JWT token and returns the user ID
@@ -193,6 +224,7 @@ func (s *AuthService) ValidateJWTToken(tokenString string) (uint, error) {
 func (s *AuthService) generateJWTToken(user *domain.User) (string, error) {
     claims := jwt.MapClaims{
         "user_id":  user.ID,
+        "username": user.Username,  // ✅ Include username in JWT
         "phone":    user.PhoneNumber,
         "is_admin": user.IsAdmin,
         "exp":      time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
@@ -207,6 +239,7 @@ func (s *AuthService) generateJWTToken(user *domain.User) (string, error) {
 
     s.logger.Debug("JWT token generated", 
         "user_id", user.ID,
+        "username", user.Username[:min(4, len(user.Username))]+"****",
         "expires_in", "7 days")
 
     return tokenString, nil

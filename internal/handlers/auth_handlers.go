@@ -48,7 +48,6 @@ func NewAuthHandler(
     }
 }
 
-// FIXED: Register method - Remove unused code variable
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
     if err := r.ParseForm(); err != nil {
         http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -66,17 +65,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // REMOVED: Unused code generation
-    // code, err := generateSecureCode()
-    // if err != nil {
-    //     log.Printf("Failed to generate secure code: %v", err)
-    //     data := convertToInterfaceMap(map[string]string{"Error": "An internal error occurred. Please try again."})
-    //     renderTemplate(w, "register.html", data)
-    //     return
-    // }
-
-    // Use AuthService to register the user first
-    user, err := h.AuthService.Register(r.Context(), phone, password)
+    // ✅ FIXED: Now passes username as first parameter
+    user, err := h.AuthService.Register(r.Context(), username, phone, password)
     if err != nil {
         log.Printf("Failed to register user: %v", err)
         data := convertToInterfaceMap(map[string]string{"Error": err.Error()})
@@ -84,16 +74,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Set the username after registration
-    user.Username = username
-    if err := h.UserService.UpdateUser(r.Context(), user); err != nil {
-        log.Printf("Failed to update username: %v", err)
-        data := convertToInterfaceMap(map[string]string{"Error": "Registration failed. Please try again."})
-        renderTemplate(w, "register.html", data)
-        return
-    }
+    // ✅ REMOVE: No longer needed since username is set during creation
+    // user.Username = username
+    // if err := h.UserService.UpdateUser(r.Context(), user); err != nil {
+    //     log.Printf("Failed to update username: %v", err)
+    //     data := convertToInterfaceMap(map[string]string{"Error": "Registration failed. Please try again."})
+    //     renderTemplate(w, "register.html", data)
+    //     return
+    // }
 
-    // Send verification code (generates its own code internally)
+    // Send verification code
     if err := h.VerificationService.SendVerificationCode(r.Context(), user.ID); err != nil {
         log.Printf("Failed to send verification code: %v", err)
         data := convertToInterfaceMap(map[string]string{"Error": err.Error()})
@@ -104,6 +94,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
     data := map[string]interface{}{"PhoneNumber": phone}
     renderTemplate(w, "verify_sms.html", data)
 }
+
 
 
 // FIXED: VerifySMS method
