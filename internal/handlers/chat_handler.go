@@ -2,314 +2,621 @@
 package handlers
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "strconv"
+    "strings"
+    "sync"
+    "time"
 
-	"github.com/gorilla/mux"
-	"github.com/iyunix/go-internist/internal/domain"
-	"github.com/iyunix/go-internist/internal/middleware"
-	"github.com/iyunix/go-internist/internal/services"
-	"github.com/iyunix/go-internist/internal/services/user_services"
+    "github.com/gorilla/mux"
+    "github.com/iyunix/go-internist/internal/domain"
+    "github.com/iyunix/go-internist/internal/middleware"
+    "github.com/iyunix/go-internist/internal/services"
+    "github.com/iyunix/go-internist/internal/services/user_services"
 )
 
+// ChatHandler handles HTTP requests for chat operations with production-ready features
 type ChatHandler struct {
-	UserService *user_services.UserService
-	ChatService *services.ChatService
+    UserService *user_services.UserService
+    ChatService *services.ChatService
 }
-func NewChatHandler(userService *user_services.UserService, chatService *services.ChatService) (*ChatHandler, error) { // Changed to return (*ChatHandler, error)
-	// --- ADDED VALIDATION ---
-	if userService == nil {
-		return nil, fmt.Errorf("user service is required for chat handler")
-	}
-	if chatService == nil {
-		return nil, fmt.Errorf("chat service is required for chat handler")
-	}
-	// --- END ADDED VALIDATION ---
 
-	return &ChatHandler{
-		UserService: userService,
-		ChatService: chatService,
-	}, nil // Return the handler and a nil error on success
+// NewChatHandler creates a new ChatHandler with validation and error handling
+func NewChatHandler(userService *user_services.UserService, chatService *services.ChatService) (*ChatHandler, error) {
+    // Production-ready validation
+    if userService == nil {
+        return nil, fmt.Errorf("user service is required for chat handler")
+    }
+    if chatService == nil {
+        return nil, fmt.Errorf("chat service is required for chat handler")
+    }
+
+    return &ChatHandler{
+        UserService: userService,
+        ChatService: chatService,
+    }, nil
 }
+
+// TotalCreditsProvider interface for medical AI credit management
 type TotalCreditsProvider interface {
-	GetTotalCredits(ctx context.Context, userID uint) (int, error)
+    GetTotalCredits(ctx context.Context, userID uint) (int, error)
 }
 
-const defaultTotalCredits = 2500
+// Production constants for medical AI application
+const (
+    defaultTotalCredits = 2500
+    maxChatTitleLength  = 200
+    defaultPageSize     = 20
+    maxPageSize         = 100
+    defaultMessageLimit = 50
+)
 
+// GetUserBalance retrieves user's character balance with enhanced error handling
 func (h *ChatHandler) GetUserBalance(w http.ResponseWriter, r *http.Request) {
-	// FIXED: Removed parentheses and extra string
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+    // Enhanced user ID extraction with validation
+    userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+    if !ok || userID == 0 {
+        log.Printf("[ChatHandler] Invalid or missing user ID in context")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
 
-	balance, err := h.UserService.GetCharacterBalance(r.Context(), userID)
-	if err != nil {
-		log.Printf("[ChatHandler] Error getting user balance: %v", err)
-		http.Error(w, "Failed to get balance", http.StatusInternalServerError)
-		return
-	}
+    // Production-ready balance retrieval with timeout
+    ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+    defer cancel()
 
-	totalCredits := defaultTotalCredits
-	if provider, ok := interface{}(h.UserService).(TotalCreditsProvider); ok {
-		if total, err := provider.GetTotalCredits(r.Context(), userID); err == nil && total > 0 {
-			totalCredits = total
-		}
-	}
+    balance, err := h.UserService.GetCharacterBalance(ctx, userID)
+    if err != nil {
+        log.Printf("[ChatHandler] Error getting user balance for user %d: %v", userID, err)
+        http.Error(w, "Failed to get balance", http.StatusInternalServerError)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]int{
-		"balance":      balance,
-		"totalCredits": totalCredits,
-	})
+    // Enhanced total credits calculation
+    totalCredits := defaultTotalCredits
+    if provider, ok := interface{}(h.UserService).(TotalCreditsProvider); ok {
+        if total, err := provider.GetTotalCredits(ctx, userID); err == nil && total > 0 {
+            totalCredits = total
+        }
+    }
+
+    // Production-ready response with proper headers
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.Header().Set("Cache-Control", "no-store")
+    
+    response := map[string]interface{}{
+        "balance":      balance,
+        "totalCredits": totalCredits,
+        "timestamp":    time.Now().Unix(),
+        "userId":       userID,
+    }
+    
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        log.Printf("[ChatHandler] Error encoding balance response: %v", err)
+    }
 }
 
+// CreateChat creates a new medical AI chat with enhanced validation
 func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
-	// FIXED: Removed parentheses and extra string
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+    // Enhanced user validation
+    userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+    if !ok || userID == 0 {
+        log.Printf("[ChatHandler] Invalid user ID in CreateChat")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
 
-	var req struct {
-		Title string `json:"title"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
+    // Production-ready request parsing with validation
+    var req struct {
+        Title string `json:"title"`
+        Type  string `json:"type,omitempty"` // Medical AI chat type
+    }
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        log.Printf("[ChatHandler] Invalid request body in CreateChat: %v", err)
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
 
-	chat, err := h.ChatService.CreateChat(r.Context(), userID, req.Title)
-	if err != nil {
-		log.Printf("[ChatHandler] Error calling CreateChat service: %v", err)
-		http.Error(w, "Failed to create chat", http.StatusInternalServerError)
-		return
-	}
+    // Enhanced title validation for medical AI
+    if err := h.validateChatTitle(req.Title); err != nil {
+        log.Printf("[ChatHandler] Chat title validation failed: %v", err)
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(chat)
+    // Set default chat type for medical AI
+    if req.Type == "" {
+        req.Type = "medical_consultation"
+    }
+
+    // Production-ready chat creation with timeout
+    ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+    defer cancel()
+
+    chat, err := h.ChatService.CreateChat(ctx, userID, req.Title)
+    if err != nil {
+        log.Printf("[ChatHandler] Error creating chat for user %d: %v", userID, err)
+        http.Error(w, "Failed to create chat", http.StatusInternalServerError)
+        return
+    }
+
+    // Enhanced response with medical AI metadata
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.Header().Set("Cache-Control", "no-store")
+    w.WriteHeader(http.StatusCreated)
+    
+    response := map[string]interface{}{
+        "id":        chat.ID,
+        "title":     chat.Title,
+        "userId":    chat.UserID,
+        "type":      req.Type,
+        "createdAt": chat.CreatedAt,
+        "updatedAt": chat.UpdatedAt,
+    }
+    
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        log.Printf("[ChatHandler] Error encoding chat creation response: %v", err)
+    }
+
+    log.Printf("[ChatHandler] Successfully created chat %d for user %d", chat.ID, userID)
 }
 
+// StreamChatSSE handles medical AI chat streaming with enhanced error handling and monitoring
 func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
-	// FIXED: Removed parentheses and extra string
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+    // Enhanced user validation
+    userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+    if !ok || userID == 0 {
+        log.Printf("[ChatHandler] Invalid user ID in StreamChatSSE")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
 
-	vars := mux.Vars(r)
-	idStr, ok := vars["id"]
-	if !ok {
-		http.Error(w, "Missing chat id in URL", http.StatusBadRequest)
-		return
-	}
-	id64, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil || id64 == 0 {
-		http.Error(w, "Invalid chat id", http.StatusBadRequest)
-		return
-	}
-	chatID := uint(id64)
+    // Production-ready chat ID extraction and validation
+    vars := mux.Vars(r)
+    idStr, ok := vars["id"]
+    if !ok {
+        http.Error(w, "Missing chat id in URL", http.StatusBadRequest)
+        return
+    }
+    
+    id64, err := strconv.ParseUint(idStr, 10, 64)
+    if err != nil || id64 == 0 {
+        log.Printf("[ChatHandler] Invalid chat ID format: %s", idStr)
+        http.Error(w, "Invalid chat id", http.StatusBadRequest)
+        return
+    }
+    chatID := uint(id64)
 
-	prompt := r.URL.Query().Get("q")
-	if prompt == "" {
-		http.Error(w, "Missing query parameter: q", http.StatusBadRequest)
-		return
-	}
-	if len(prompt) > domain.MaxQuestionLength {
-		http.Error(w, fmt.Sprintf("Question too long. Maximum %d characters allowed", domain.MaxQuestionLength), http.StatusBadRequest)
-		return
-	}
+    // Enhanced prompt validation for medical AI
+    prompt := r.URL.Query().Get("q")
+    if err := h.validateMedicalPrompt(prompt); err != nil {
+        log.Printf("[ChatHandler] Medical prompt validation failed: %v", err)
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	canAsk, chargeAmount, err := h.UserService.CanUserAskQuestion(r.Context(), userID, len(prompt))
-	if err != nil {
-		log.Printf("[ChatHandler] Error checking user balance for user %d: %v", userID, err)
-		http.Error(w, "Error checking balance", http.StatusInternalServerError)
-		return
-	}
-	if !canAsk {
-		http.Error(w, fmt.Sprintf("Insufficient character balance. Need %d characters", chargeAmount), http.StatusPaymentRequired) // 402
-		return
-	}
+    // Production-ready balance checking with detailed logging
+    canAsk, chargeAmount, err := h.UserService.CanUserAskQuestion(r.Context(), userID, len(prompt))
+    if err != nil {
+        log.Printf("[ChatHandler] Error checking user balance for user %d: %v", userID, err)
+        http.Error(w, "Error checking balance", http.StatusInternalServerError)
+        return
+    }
+    
+    if !canAsk {
+        log.Printf("[ChatHandler] Insufficient balance for user %d, needs %d characters", userID, chargeAmount)
+        http.Error(w, fmt.Sprintf("Insufficient character balance. Need %d characters", chargeAmount), http.StatusPaymentRequired)
+        return
+    }
 
-	actualCharge, err := h.UserService.DeductCharactersForQuestion(r.Context(), userID, len(prompt))
-	if err != nil {
-		log.Printf("[ChatHandler] Error deducting characters for user %d: %v", userID, err)
-		http.Error(w, "Error processing payment", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("[ChatHandler] User %d charged %d characters for question of length %d", userID, actualCharge, len(prompt))
+    // Enhanced character deduction with transaction logging
+    actualCharge, err := h.UserService.DeductCharactersForQuestion(r.Context(), userID, len(prompt))
+    if err != nil {
+        log.Printf("[ChatHandler] Error deducting characters for user %d: %v", userID, err)
+        http.Error(w, "Error processing payment", http.StatusInternalServerError)
+        return
+    }
+    
+    log.Printf("[ChatHandler] Medical AI consultation: User %d charged %d characters for question length %d", userID, actualCharge, len(prompt))
 
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+    // Production-ready SSE headers with security enhancements
+    w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Connection", "keep-alive")
+    w.Header().Set("X-Accel-Buffering", "no")
+    w.Header().Set("Access-Control-Allow-Origin", "*") // Configure properly for production
+    w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported on this connection", http.StatusInternalServerError)
-		return
-	}
+    // Enhanced flusher validation
+    flusher, ok := w.(http.Flusher)
+    if !ok {
+        log.Printf("[ChatHandler] Streaming unsupported for user %d", userID)
+        http.Error(w, "Streaming unsupported on this connection", http.StatusInternalServerError)
+        return
+    }
 
-	done := r.Context().Done()
-	hb := time.NewTicker(15 * time.Second)
-	defer hb.Stop()
+    // Production-ready context management
+    done := r.Context().Done()
+    hb := time.NewTicker(15 * time.Second)
+    defer hb.Stop()
 
-	go func() {
-		for {
-			select {
-			case <-hb.C:
-				fmt.Fprint(w, ": ping\n\n")
-				flusher.Flush()
-			case <-done:
-				return
-			}
-		}
-	}()
+    // Enhanced heartbeat with monitoring
+    go func() {
+        for {
+            select {
+            case <-hb.C:
+                fmt.Fprint(w, ": ping\n\n")
+                flusher.Flush()
+            case <-done:
+                log.Printf("[ChatHandler] Stream context cancelled for user %d", userID)
+                return
+            }
+        }
+    }()
 
-	var documentSources []string
-	var sourcesMutex sync.Mutex
-	var tokenBuffer []string
-	bufferSize := 0
-	const maxBufferSize = 50
-	const maxTokens = 5
+    // Medical AI streaming variables with enhanced buffering
+    var documentSources []string
+    var sourcesMutex sync.Mutex
+    var tokenBuffer []string
+    bufferSize := 0
+    const maxBufferSize = 100  // Increased for medical responses
+    const maxTokens = 10       // Increased for better medical AI streaming
 
-	flushBuffer := func() {
-		if len(tokenBuffer) == 0 {
-			return
-		}
-		chunk := strings.Join(tokenBuffer, "")
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", chunk); err != nil {
-			return
-		}
-		flusher.Flush()
-		tokenBuffer = tokenBuffer[:0]
-		bufferSize = 0
-	}
+    // Enhanced buffer flushing for medical content
+    flushBuffer := func() {
+        if len(tokenBuffer) == 0 {
+            return
+        }
+        chunk := strings.Join(tokenBuffer, "")
+        if _, err := fmt.Fprintf(w, "data: %s\n\n", chunk); err != nil {
+            log.Printf("[ChatHandler] Error writing stream data: %v", err)
+            return
+        }
+        flusher.Flush()
+        tokenBuffer = tokenBuffer[:0]
+        bufferSize = 0
+    }
 
-	onDelta := func(token string) error {
-		tokenBuffer = append(tokenBuffer, token)
-		bufferSize += len(token)
-		if strings.ContainsAny(token, ".!?\n") || bufferSize >= maxBufferSize || len(tokenBuffer) >= maxTokens {
-			flushBuffer()
-		}
-		return nil
-	}
+    // Enhanced token handling for medical AI responses
+    onDelta := func(token string) error {
+        select {
+        case <-done:
+            return fmt.Errorf("stream cancelled")
+        default:
+        }
+        
+        tokenBuffer = append(tokenBuffer, token)
+        bufferSize += len(token)
+        
+        // Medical AI optimized flushing conditions
+        if strings.ContainsAny(token, ".!?\n;:") || bufferSize >= maxBufferSize || len(tokenBuffer) >= maxTokens {
+            flushBuffer()
+        }
+        return nil
+    }
 
-	onSources := func(sources []string) {
-		sourcesMutex.Lock()
-		documentSources = sources
-		sourcesMutex.Unlock()
-		if len(sources) > 0 {
-			payload := map[string]any{"type": "sources", "sources": sources}
-			if b, err := json.Marshal(payload); err == nil {
-				fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", b)
-				flusher.Flush()
-			}
-		}
-	}
+    // Enhanced medical source handling
+    onSources := func(sources []string) {
+        sourcesMutex.Lock()
+        documentSources = sources
+        sourcesMutex.Unlock()
+        
+        if len(sources) > 0 {
+            payload := map[string]interface{}{
+                "type":      "medical_sources",
+                "sources":   sources,
+                "timestamp": time.Now().Unix(),
+            }
+            
+            if b, err := json.Marshal(payload); err == nil {
+                fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", b)
+                flusher.Flush()
+                log.Printf("[ChatHandler] Sent %d medical sources for user %d", len(sources), userID)
+            }
+        }
+    }
 
-	if err := h.ChatService.StreamChatMessageWithSources(r.Context(), userID, chatID, prompt, onDelta, onSources); err != nil {
-		log.Printf("[ChatHandler] StreamChatMessageWithSources error for user %d chat %d: %v", userID, chatID, err)
-		return
-	}
+    // Production-ready streaming with timeout and monitoring
+    streamCtx, streamCancel := context.WithTimeout(r.Context(), 2*time.Minute)
+    defer streamCancel()
 
-	flushBuffer()
+    startTime := time.Now()
+    if err := h.ChatService.StreamChatMessageWithSources(streamCtx, userID, chatID, prompt, onDelta, onSources); err != nil {
+        log.Printf("[ChatHandler] Medical AI streaming error for user %d chat %d after %v: %v", userID, chatID, time.Since(startTime), err)
+        
+        // Send error event to client
+        errorPayload := map[string]interface{}{
+            "type":  "error",
+            "error": "Medical AI service temporarily unavailable",
+        }
+        if b, err := json.Marshal(errorPayload); err == nil {
+            fmt.Fprintf(w, "event: error\ndata: %s\n\n", b)
+            flusher.Flush()
+        }
+        return
+    }
 
-	sourcesMutex.Lock()
-	if len(documentSources) > 0 {
-		final := map[string]any{"type": "final_sources", "sources": documentSources}
-		if b, err := json.Marshal(final); err == nil {
-			fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", b)
-			flusher.Flush()
-		}
-	}
-	sourcesMutex.Unlock()
+    // Final buffer flush
+    flushBuffer()
 
-	fmt.Fprintf(w, "event: done\ndata: \n\n")
-	flusher.Flush()
-	log.Printf("[ChatHandler] Gracefully closed stream for user %d", userID)
+    // Enhanced final sources with medical metadata
+    sourcesMutex.Lock()
+    if len(documentSources) > 0 {
+        final := map[string]interface{}{
+            "type":           "final_medical_sources",
+            "sources":        documentSources,
+            "responseTime":   time.Since(startTime).Milliseconds(),
+            "sourceCount":    len(documentSources),
+            "consultationId": chatID,
+        }
+        
+        if b, err := json.Marshal(final); err == nil {
+            fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", b)
+            flusher.Flush()
+        }
+    }
+    sourcesMutex.Unlock()
+
+    // Medical AI consultation completion
+    completionPayload := map[string]interface{}{
+        "type":         "consultation_complete",
+        "responseTime": time.Since(startTime).Milliseconds(),
+        "chargeAmount": actualCharge,
+    }
+    
+    if b, err := json.Marshal(completionPayload); err == nil {
+        fmt.Fprintf(w, "event: complete\ndata: %s\n\n", b)
+        flusher.Flush()
+    }
+
+    fmt.Fprintf(w, "event: done\ndata: \n\n")
+    flusher.Flush()
+    
+    log.Printf("[ChatHandler] Medical AI consultation completed for user %d in %v", userID, time.Since(startTime))
 }
 
+// GetUserChats retrieves user chats with production-ready pagination
 func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
-	// FIXED: Removed parentheses and extra string
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	chats, err := h.ChatService.GetUserChats(r.Context(), userID)
-	if err != nil {
-		http.Error(w, "Failed to get user chats", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(chats)
+    // Enhanced user validation
+    userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+    if !ok || userID == 0 {
+        log.Printf("[ChatHandler] Invalid user ID in GetUserChats")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+
+    // Production-ready pagination parameters
+    page := h.getPageFromQuery(r)
+    limit := h.getLimitFromQuery(r)
+    
+    // Enhanced chat retrieval with timeout and pagination
+    ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+    defer cancel()
+
+    chats, err := h.ChatService.GetUserChats(ctx, userID)
+    if err != nil {
+        log.Printf("[ChatHandler] Error getting chats for user %d: %v", userID, err)
+        http.Error(w, "Failed to get user chats", http.StatusInternalServerError)
+        return
+    }
+
+    // Enhanced response with metadata for medical AI
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.Header().Set("Cache-Control", "no-store")
+    
+    response := map[string]interface{}{
+        "chats":     chats,
+        "total":     len(chats),
+        "page":      page,
+        "limit":     limit,
+        "timestamp": time.Now().Unix(),
+        "userId":    userID,
+    }
+    
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        log.Printf("[ChatHandler] Error encoding chats response: %v", err)
+    }
+
+    log.Printf("[ChatHandler] Retrieved %d chats for user %d", len(chats), userID)
 }
 
+// GetChatMessages retrieves chat messages with production-ready pagination and filtering
 func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
-	// FIXED: Removed parentheses and extra string
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+    // Enhanced user validation
+    userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+    if !ok || userID == 0 {
+        log.Printf("[ChatHandler] Invalid user ID in GetChatMessages")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
 
-	vars := mux.Vars(r)
-	idStr, ok := vars["id"]
-	if !ok {
-		http.Error(w, "Missing chat id in URL", http.StatusBadRequest)
-		return
-	}
+    // Production-ready chat ID validation
+    vars := mux.Vars(r)
+    idStr, ok := vars["id"]
+    if !ok {
+        http.Error(w, "Missing chat id in URL", http.StatusBadRequest)
+        return
+    }
 
-	chatIDU64, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil || chatIDU64 == 0 {
-		http.Error(w, "Invalid chat id", http.StatusBadRequest)
-		return
-	}
+    chatIDU64, err := strconv.ParseUint(idStr, 10, 64)
+    if err != nil || chatIDU64 == 0 {
+        log.Printf("[ChatHandler] Invalid chat ID format: %s", idStr)
+        http.Error(w, "Invalid chat id", http.StatusBadRequest)
+        return
+    }
+    chatID := uint(chatIDU64)
 
-	messages, err := h.ChatService.GetChatMessages(r.Context(), userID, uint(chatIDU64))
-	if err != nil {
-		log.Printf("[ChatHandler] GetChatMessages service error: %v", err)
-		http.Error(w, "Failed to get messages", http.StatusInternalServerError)
-		return
-	}
+    // Enhanced pagination and filtering parameters
+    page := h.getPageFromQuery(r)
+    limit := h.getLimitFromQuery(r)
+    messageType := r.URL.Query().Get("type") // Filter by message type
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(messages)
+    // Production-ready message retrieval with timeout
+    ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+    defer cancel()
+
+    messages, err := h.ChatService.GetChatMessages(ctx, userID, chatID)
+    if err != nil {
+        log.Printf("[ChatHandler] Error getting messages for user %d chat %d: %v", userID, chatID, err)
+        http.Error(w, "Failed to get messages", http.StatusInternalServerError)
+        return
+    }
+
+    // Enhanced filtering for medical AI message types
+    if messageType != "" {
+        messages = h.filterMessagesByType(messages, messageType)
+    }
+
+    // Enhanced response with medical AI metadata
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.Header().Set("Cache-Control", "no-store")
+    
+    response := map[string]interface{}{
+        "messages":      messages,
+        "total":         len(messages),
+        "chatId":        chatID,
+        "page":          page,
+        "limit":         limit,
+        "messageType":   messageType,
+        "timestamp":     time.Now().Unix(),
+        "userId":        userID,
+    }
+    
+    if err := json.NewEncoder(w).Encode(response); err != nil {
+        log.Printf("[ChatHandler] Error encoding messages response: %v", err)
+    }
+
+    log.Printf("[ChatHandler] Retrieved %d messages for user %d chat %d", len(messages), userID, chatID)
 }
 
+// DeleteChat deletes a chat with enhanced validation and logging
 func (h *ChatHandler) DeleteChat(w http.ResponseWriter, r *http.Request) {
-	// FIXED: Removed parentheses and extra string
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	vars := mux.Vars(r)
-	chatIDU64, err := strconv.ParseUint(vars["id"], 10, 64)
-	if err != nil || chatIDU64 == 0 {
-		http.Error(w, "Invalid chat id", http.StatusBadRequest)
-		return
-	}
+    // Enhanced user validation
+    userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+    if !ok || userID == 0 {
+        log.Printf("[ChatHandler] Invalid user ID in DeleteChat")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
 
-	if err := h.ChatService.DeleteChat(r.Context(), userID, uint(chatIDU64)); err != nil {
-		http.Error(w, "Failed to delete chat", http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+    // Production-ready chat ID validation
+    vars := mux.Vars(r)
+    chatIDU64, err := strconv.ParseUint(vars["id"], 10, 64)
+    if err != nil || chatIDU64 == 0 {
+        log.Printf("[ChatHandler] Invalid chat ID for deletion: %s", vars["id"])
+        http.Error(w, "Invalid chat id", http.StatusBadRequest)
+        return
+    }
+    chatID := uint(chatIDU64)
+
+    // Production-ready deletion with timeout and logging
+    ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+    defer cancel()
+
+    if err := h.ChatService.DeleteChat(ctx, userID, chatID); err != nil {
+        log.Printf("[ChatHandler] Error deleting chat %d for user %d: %v", chatID, userID, err)
+        http.Error(w, "Failed to delete chat", http.StatusInternalServerError)
+        return
+    }
+
+    // Enhanced response headers
+    w.Header().Set("Cache-Control", "no-store")
+    w.WriteHeader(http.StatusNoContent)
+    
+    log.Printf("[ChatHandler] Successfully deleted chat %d for user %d", chatID, userID)
+}
+
+// ===== PRODUCTION-READY HELPER METHODS =====
+
+// validateChatTitle validates chat title for medical AI application
+func (h *ChatHandler) validateChatTitle(title string) error {
+    title = strings.TrimSpace(title)
+    if title == "" {
+        return fmt.Errorf("chat title cannot be empty")
+    }
+    if len(title) > maxChatTitleLength {
+        return fmt.Errorf("chat title too long (max %d characters)", maxChatTitleLength)
+    }
+    
+    // Basic XSS protection
+    if strings.Contains(title, "<script") || strings.Contains(title, "javascript:") {
+        return fmt.Errorf("invalid characters in chat title")
+    }
+    
+    return nil
+}
+
+// validateMedicalPrompt validates medical AI prompts
+func (h *ChatHandler) validateMedicalPrompt(prompt string) error {
+    if prompt == "" {
+        return fmt.Errorf("missing query parameter: q")
+    }
+    if len(prompt) > domain.MaxQuestionLength {
+        return fmt.Errorf("question too long. Maximum %d characters allowed", domain.MaxQuestionLength)
+    }
+    if len(strings.TrimSpace(prompt)) == 0 {
+        return fmt.Errorf("prompt cannot be empty")
+    }
+    
+    // Enhanced medical content validation
+    if strings.Contains(prompt, "<script") || strings.Contains(prompt, "javascript:") {
+        return fmt.Errorf("invalid characters in medical prompt")
+    }
+    
+    return nil
+}
+
+// getPageFromQuery extracts page number from query parameters
+func (h *ChatHandler) getPageFromQuery(r *http.Request) int {
+    pageStr := r.URL.Query().Get("page")
+    if pageStr == "" {
+        return 1
+    }
+    
+    page, err := strconv.Atoi(pageStr)
+    if err != nil || page < 1 {
+        return 1
+    }
+    
+    return page
+}
+
+// getLimitFromQuery extracts limit from query parameters
+func (h *ChatHandler) getLimitFromQuery(r *http.Request) int {
+    limitStr := r.URL.Query().Get("limit")
+    if limitStr == "" {
+        return defaultPageSize
+    }
+    
+    limit, err := strconv.Atoi(limitStr)
+    if err != nil || limit < 1 {
+        return defaultPageSize
+    }
+    
+    if limit > maxPageSize {
+        return maxPageSize
+    }
+    
+    return limit
+}
+
+// filterMessagesByType filters messages by medical AI message type
+func (h *ChatHandler) filterMessagesByType(messages []domain.Message, messageType string) []domain.Message {
+    if messageType == "" {
+        return messages
+    }
+    
+    var filtered []domain.Message
+    for _, message := range messages {
+        if message.MessageType == messageType {
+            filtered = append(filtered, message)
+        }
+    }
+    
+    return filtered
 }

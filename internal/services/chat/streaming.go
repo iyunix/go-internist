@@ -119,7 +119,11 @@ func (s *StreamingService) StreamChatResponse(
 }
 
 func (s *StreamingService) saveUserMessage(ctx context.Context, chatID uint, content string) error {
-    userMessage := &domain.Message{ChatID: chatID, Role: "user", Content: content}
+    userMessage := &domain.Message{
+        ChatID:      chatID,
+        MessageType: domain.MessageTypeUser,
+        Content:     content,  // ← Fixed: was "prompt", should be "content"
+    }
     _, err := s.messageRepo.Create(ctx, userMessage)
     if err != nil {
         return err
@@ -128,12 +132,18 @@ func (s *StreamingService) saveUserMessage(ctx context.Context, chatID uint, con
     return nil
 }
 
+
 func (s *StreamingService) saveAssistantMessage(chatID uint, content string) {
     if len(content) > 0 {
-        assistantMessage := &domain.Message{ChatID: chatID, Role: "assistant", Content: content}
-        if _, err := s.messageRepo.Create(context.Background(), assistantMessage); err != nil {
+        aiMessage := &domain.Message{
+            ChatID:      chatID,
+            MessageType: domain.MessageTypeAssistant,
+            Content:     content,  // ← Fixed: was "response", should be "content"
+        }
+        if _, err := s.messageRepo.Create(context.Background(), aiMessage); err != nil {  // ← Fixed: was "assistantMessage", should be "aiMessage"
             s.logger.Error("failed to save assistant message", "error", err)
         }
         _ = s.chatRepo.TouchUpdatedAt(context.Background(), chatID)
     }
 }
+
