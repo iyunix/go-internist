@@ -1,3 +1,4 @@
+// G:\go_internist\internal\domain\user.go
 package domain
 
 import (
@@ -124,4 +125,10 @@ func (u *User) AddCharacters(amount int) {
 // GetCharacterBalance returns current character balance
 func (u *User) GetCharacterBalance() int {
     return u.CharacterBalance
+}
+
+
+type BalanceUpdate struct {
+    UserID uint
+    Amount int
 }
