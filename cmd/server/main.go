@@ -1,208 +1,322 @@
-// File: cmd/server/main.go
 package main
 
 import (
-	"context"
-	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+    "context"
+    "fmt"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+    "strconv"
 
-	"github.com/glebarez/sqlite"
-	"github.com/gorilla/mux"
-	"gorm.io/gorm"
+    "github.com/glebarez/sqlite"
+    "github.com/gorilla/mux"
+    "gorm.io/gorm"
 
-	"github.com/iyunix/go-internist/internal/config"
-	"github.com/iyunix/go-internist/internal/domain"
-	"github.com/iyunix/go-internist/internal/handlers"
-	"github.com/iyunix/go-internist/internal/middleware"
-	"github.com/iyunix/go-internist/internal/repository"
-	"github.com/iyunix/go-internist/internal/services"
-	"github.com/iyunix/go-internist/internal/services/admin_services"
-	"github.com/iyunix/go-internist/internal/services/user_services"
+    "github.com/iyunix/go-internist/internal/services/ai"
+    "github.com/iyunix/go-internist/internal/config"
+    "github.com/iyunix/go-internist/internal/domain"
+    "github.com/iyunix/go-internist/internal/handlers"
+    "github.com/iyunix/go-internist/internal/middleware"
+    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/services"
+    "github.com/iyunix/go-internist/internal/services/sms"
+    "github.com/iyunix/go-internist/internal/services/admin_services"
+    "github.com/iyunix/go-internist/internal/services/user_services"
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Max-Age", "86400")
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+        w.Header().Set("Access-Control-Allow-Credentials", "true")
+        w.Header().Set("Access-Control-Max-Age", "86400")
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+        if r.Method == "OPTIONS" {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
 
-		next.ServeHTTP(w, r)
-	})
+        next.ServeHTTP(w, r)
+    })
 }
 
 func main() {
-	cfg := config.Load()
+    startTime := time.Now()
+    
+    // Create production logger first
+    logger := services.NewLogger("go_internist")
+    logger.Info("🤖 Internist AI - Medical Chat Assistant starting", 
+        "version", "1.0.0",
+        "go_env", os.Getenv("GO_ENV"),
+        "log_level", os.Getenv("LOG_LEVEL"))
 
-	db, err := gorm.Open(sqlite.Open("notebook.db"), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("DB Error: %v", err)
-	}
+    cfg := config.Load()
+    logger.Info("configuration loaded successfully")
 
-	if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
-		log.Fatalf("DB Migration Error: %v", err)
-	}
+    // Database setup with structured logging
+    logger.Info("initializing database connection", "database", "notebook.db")
+    db, err := gorm.Open(sqlite.Open("notebook.db"), &gorm.Config{})
+    if err != nil {
+        logger.Error("database connection failed", "error", err, "database", "notebook.db")
+        os.Exit(1)
+    }
+    logger.Info("database connected successfully", "driver", "sqlite")
 
-	// --- Repositories ---
-	userRepo := repository.NewGormUserRepository(db)
-	chatRepo := repository.NewChatRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
+    // Database migration with logging
+    logger.Info("running database migrations")
+    if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
+        logger.Error("database migration failed", "error", err, 
+            "tables", []string{"users", "chats", "messages"})
+        os.Exit(1)
+    }
+    logger.Info("database migrations completed successfully")
 
-	// --- Services ---
-	// MODIFIED: Now handling the error from NewAIService
-	aiService, err := services.NewAIService(
-		cfg.AvalaiAPIKeyEmbedding,
-		cfg.JabirAPIKey,
-		"https://api.avalai.ir/v1",
-		"https://openai.jabirproject.org/v1",
-		cfg.EmbeddingModelName,
-	)
-	if err != nil {
-		log.Fatalf("FATAL: Failed to initialize AI Service: %v", err)
-	}
+    // --- Repositories ---
+    logger.Info("initializing repositories")
+    userRepo := repository.NewGormUserRepository(db)
+    chatRepo := repository.NewChatRepository(db)
+    messageRepo := repository.NewMessageRepository(db)
+    logger.Info("repositories initialized successfully")
 
-	pineconeService, err := services.NewPineconeService(
-		cfg.PineconeAPIKey,
-		cfg.PineconeIndexHost,
-		cfg.PineconeNamespace,
-	)
-	if err != nil {
-		log.Fatalf("Failed to initialize Pinecone service: %v", err)
-	}
+    // --- Services ---
+    logger.Info("initializing services")
 
-	userService := user_services.NewUserService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber)
+    // --- AI Service Setup ---
+    logger.Info("configuring AI service")
+    aiConfig := ai.DefaultConfig()
+    aiConfig.EmbeddingKey = cfg.AvalaiAPIKeyEmbedding
+    aiConfig.LLMKey = cfg.JabirAPIKey
+    aiConfig.EmbeddingBaseURL = "https://api.avalai.ir/v1"
+    aiConfig.LLMBaseURL = "https://openai.jabirproject.org/v1"
+    aiConfig.EmbeddingModel = cfg.EmbeddingModelName
 
-	// MODIFIED: Now handling the error from NewChatService
-	chatService, err := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService, cfg.RetrievalTopK)
-	if err != nil {
-		log.Fatalf("FATAL: Failed to initialize Chat Service: %v", err)
-	}
-	
-	smsService := services.NewSMSService()
-	balanceService := user_services.NewBalanceService(userRepo)
-	adminService := admin_services.NewAdminService(userRepo)
+    // Validate AI configuration
+    if err := aiConfig.Validate(); err != nil {
+        logger.Error("AI configuration validation failed", "error", err)
+        os.Exit(1)
+    }
 
-	// --- Handlers ---
-	authHandler := handlers.NewAuthHandler(userService, smsService, balanceService)
-	
-	// MODIFIED: Now handling the error from NewChatHandler
-	chatHandler, err := handlers.NewChatHandler(userService, chatService)
-	if err != nil {
-		log.Fatalf("FATAL: Failed to initialize Chat Handler: %v", err)
-	}
+    aiProvider := ai.NewOpenAIProvider(aiConfig)
+    aiService := services.NewAIService(aiProvider, logger)
+    logger.Info("AI service initialized successfully", 
+        "embedding_model", cfg.EmbeddingModelName,
+        "embedding_provider", "avalai",
+        "llm_provider", "jabir")
 
-	pageHandler := handlers.NewPageHandler()
-	adminHandler := handlers.NewAdminHandler(adminService)
+    // --- Pinecone Service ---
+    logger.Info("initializing Pinecone vector database service")
+    pineconeService, err := services.NewPineconeService(
+        cfg.PineconeAPIKey,
+        cfg.PineconeIndexHost,
+        cfg.PineconeNamespace,
+    )
+    if err != nil {
+        logger.Error("Pinecone service initialization failed", "error", err,
+            "index_host", cfg.PineconeIndexHost,
+            "namespace", cfg.PineconeNamespace)
+        os.Exit(1)
+    }
+    logger.Info("Pinecone service initialized successfully", 
+        "namespace", cfg.PineconeNamespace,
+        "retry_config", "3 attempts with backoff")
 
-	// --- Router Setup ---
-	r := mux.NewRouter()
-	authMiddleware := middleware.NewJWTMiddleware(cfg.JWTSecretKey)
-	adminMiddleware := middleware.RequireAdmin(userRepo)
+    // --- SMS Service Setup (MOVED BEFORE USER SERVICES) ---
+    logger.Info("configuring SMS service")
+    smsConfig := &sms.Config{
+        AccessKey:  os.Getenv("SMS_ACCESS_KEY"),
+        TemplateID: func() int {
+            id, _ := strconv.Atoi(os.Getenv("SMS_TEMPLATE_ID"))
+            return id
+        }(),
+        APIURL:     os.Getenv("SMS_API_URL"),
+        Timeout:    10 * time.Second,
+    }
+    
+    // Validate SMS configuration
+    if err := smsConfig.Validate(); err != nil {
+        logger.Error("SMS configuration validation failed", "error", err)
+        os.Exit(1)
+    }
+    
+    smsProvider := sms.NewSMSIRProvider(smsConfig)
+    smsService := services.NewSMSService(smsProvider, logger)
+    logger.Info("SMS service initialized successfully", 
+        "provider", "sms.ir",
+        "timeout", smsConfig.Timeout.String())
 
-	r.Use(corsMiddleware)
-	r.Use(middleware.RecoverPanic)
-	r.Use(middleware.LoggingMiddleware)
+    // --- User Services (NOW SMS SERVICE IS AVAILABLE) ---
+    logger.Info("initializing user services")
+    userService := user_services.NewUserService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber, logger)
+    authService := user_services.NewAuthService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber, logger)
+    balanceService := user_services.NewBalanceService(userRepo, logger)
+    // lockoutService := user_services.NewLockoutService(userRepo, logger)
+    verificationService := user_services.NewVerificationService(userRepo, smsService, logger)
+    logger.Info("user services initialized successfully",
+        "services", []string{"user", "auth", "balance", "lockout", "verification"})
 
-	// --- Public Routes ---
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK); _, _ = w.Write([]byte("OK")) }).Methods("GET")
-	r.HandleFunc("/api/log", handlers.LogFrontendEvent).Methods("POST")
-	r.HandleFunc("/", pageHandler.ShowIndexPage).Methods("GET")
-	r.HandleFunc("/login", pageHandler.ShowLoginPage).Methods("GET")
-	r.HandleFunc("/register", pageHandler.ShowRegisterPage).Methods("GET")
-	r.HandleFunc("/login", authHandler.Login).Methods("POST")
-	r.HandleFunc("/register", authHandler.Register).Methods("POST")
-	r.HandleFunc("/logout", authHandler.Logout).Methods("GET")
-	r.HandleFunc("/verify-sms", authHandler.VerifySMS).Methods("POST")
-	r.HandleFunc("/verify-sms", pageHandler.ShowVerifySMSPage).Methods("GET")
-	r.HandleFunc("/resend-sms", authHandler.ResendSMS).Methods("GET")
+    // --- Chat Service ---
+    logger.Info("initializing medical chat service")
+    chatService, err := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService, cfg.RetrievalTopK)
+    if err != nil {
+        logger.Error("chat service initialization failed", "error", err,
+            "retrieval_top_k", cfg.RetrievalTopK)
+        os.Exit(1)
+    }
+    logger.Info("medical chat service initialized successfully", 
+        "retrieval_top_k", cfg.RetrievalTopK)
 
-	// --- Protected Routes (for regular users) ---
-	protected := r.PathPrefix("/").Subrouter()
-	protected.Use(authMiddleware)
-	protected.HandleFunc("/chat", pageHandler.ShowChatPage).Methods("GET")
+    // --- Admin Service ---
+    adminService := admin_services.NewAdminService(userRepo, logger)
+    logger.Info("admin service initialized successfully")
 
-	api := protected.PathPrefix("/api").Subrouter()
-	api.HandleFunc("/user/balance", authHandler.GetUserCreditHandler).Methods("GET")
-	api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
-	api.HandleFunc("/chats", chatHandler.CreateChat).Methods("POST")
-	api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
-	api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
-	api.HandleFunc("/chats/{id:[0-9]+}/stream", chatHandler.StreamChatSSE).Methods("GET")
+    // --- Handlers ---
+    logger.Info("initializing HTTP handlers")
+    authHandler := handlers.NewAuthHandler(userService, authService, verificationService, smsService, balanceService)
+    
+    chatHandler, err := handlers.NewChatHandler(userService, chatService)
+    if err != nil {
+        logger.Error("chat handler initialization failed", "error", err)
+        os.Exit(1)
+    }
 
-	// --- DEFINE AND PROTECT ADMIN ROUTES ---
-	adminPageRoutes := r.PathPrefix("/admin").Subrouter()
-	adminPageRoutes.Use(authMiddleware)
-	adminPageRoutes.Use(adminMiddleware)
-	adminPageRoutes.HandleFunc("", pageHandler.ShowAdminPage).Methods("GET")
+    pageHandler := handlers.NewPageHandler()
+    adminHandler := handlers.NewAdminHandler(adminService)
+    logger.Info("HTTP handlers initialized successfully")
 
-	adminApiRoutes := r.PathPrefix("/api/admin").Subrouter()
-	adminApiRoutes.Use(authMiddleware)
-	adminApiRoutes.Use(adminMiddleware)
-	adminApiRoutes.HandleFunc("/users", adminHandler.GetAllUsersHandler).Methods("GET")
-	adminApiRoutes.HandleFunc("/users/export", adminHandler.ExportUsersCSVHandler).Methods("GET")
-	adminApiRoutes.HandleFunc("/users/plan", adminHandler.ChangePlanHandler).Methods("POST")
-	adminApiRoutes.HandleFunc("/users/renew", adminHandler.RenewSubscriptionHandler).Methods("POST")
-	adminApiRoutes.HandleFunc("/users/topup", adminHandler.TopUpBalanceHandler).Methods("POST")
+    // --- Router Setup ---
+    logger.Info("configuring HTTP router and middleware")
+    r := mux.NewRouter()
+    authMiddleware := middleware.NewJWTMiddleware(authService)
+    adminMiddleware := middleware.RequireAdmin(userRepo)
 
-	// --- Custom Error Handlers ---
-	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pageHandler.ShowErrorPage(w, "404", "Page Not Found", "The page you are looking for does not exist.")
-	})
-	r.MethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pageHandler.ShowErrorPage(w, "405", "Method Not Allowed", "The method is not allowed for this resource.")
-	})
+    r.Use(corsMiddleware)
+    r.Use(middleware.RecoverPanic)
+    r.Use(middleware.LoggingMiddleware)
 
-	// --- Server Configuration ---
-	port := ":8081"
-	if cfg.ServerPort != "" {
-		port = ":" + cfg.ServerPort
-	}
-	srv := &http.Server{
-		Addr:    port,
-		Handler: r,
-	}
+    // --- Public Routes ---
+    r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+    r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { 
+        w.WriteHeader(http.StatusOK)
+        _, _ = w.Write([]byte("OK")) 
+    }).Methods("GET")
+    r.HandleFunc("/api/log", handlers.LogFrontendEvent).Methods("POST")
+    r.HandleFunc("/", pageHandler.ShowIndexPage).Methods("GET")
+    r.HandleFunc("/login", pageHandler.ShowLoginPage).Methods("GET")
+    r.HandleFunc("/register", pageHandler.ShowRegisterPage).Methods("GET")
+    r.HandleFunc("/login", authHandler.Login).Methods("POST")
+    r.HandleFunc("/register", authHandler.Register).Methods("POST")
+    r.HandleFunc("/logout", authHandler.Logout).Methods("GET")
+    r.HandleFunc("/verify-sms", authHandler.VerifySMS).Methods("POST")
+    r.HandleFunc("/verify-sms", pageHandler.ShowVerifySMSPage).Methods("GET")
+    r.HandleFunc("/resend-sms", authHandler.ResendSMS).Methods("GET")
 
-	// --- Startup Logging ---
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("==================================================")
-	log.Printf("🤖 Internist AI - Medical Chat Assistant")
-	log.Printf("==================================================")
-	log.Printf("🚀 Server starting on port %s", port)
-	log.Printf("🌐 Local access: http://localhost%s", port)
-	log.Printf("💬 Chat interface: http://localhost%s/chat", port)
-	log.Printf("🔒 Admin panel: http://localhost%s/admin", port)
-	log.Printf("🔄 Server ready to accept connections!")
-	log.Printf("==================================================")
+    // --- Protected Routes ---
+    protected := r.PathPrefix("/").Subrouter()
+    protected.Use(authMiddleware)
+    protected.HandleFunc("/chat", pageHandler.ShowChatPage).Methods("GET")
 
-	// --- Start Server in Goroutine ---
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("❌ Server startup failed: %v", err)
-		}
-	}()
+    api := protected.PathPrefix("/api").Subrouter()
+    api.HandleFunc("/user/balance", authHandler.GetUserCreditHandler).Methods("GET")
+    api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
+    api.HandleFunc("/chats", chatHandler.CreateChat).Methods("POST")
+    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
+    api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
+    api.HandleFunc("/chats/{id:[0-9]+}/stream", chatHandler.StreamChatSSE).Methods("GET")
 
-	// --- Graceful Shutdown ---
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+    // --- Admin Routes ---
+    adminPageRoutes := r.PathPrefix("/admin").Subrouter()
+    adminPageRoutes.Use(authMiddleware)
+    adminPageRoutes.Use(adminMiddleware)
+    adminPageRoutes.HandleFunc("", pageHandler.ShowAdminPage).Methods("GET")
 
-	log.Println("🛑 Shutting down server gracefully...")
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+    adminApiRoutes := r.PathPrefix("/api/admin").Subrouter()
+    adminApiRoutes.Use(authMiddleware)
+    adminApiRoutes.Use(adminMiddleware)
+    adminApiRoutes.HandleFunc("/users", adminHandler.GetAllUsersHandler).Methods("GET")
+    adminApiRoutes.HandleFunc("/users/export", adminHandler.ExportUsersCSVHandler).Methods("GET")
+    adminApiRoutes.HandleFunc("/users/plan", adminHandler.ChangePlanHandler).Methods("POST")
+    adminApiRoutes.HandleFunc("/users/renew", adminHandler.RenewSubscriptionHandler).Methods("POST")
+    adminApiRoutes.HandleFunc("/users/topup", adminHandler.TopUpBalanceHandler).Methods("POST")
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("❌ Server shutdown failed: %v", err)
-	}
-	log.Println("✅ Server stopped gracefully")
+    // --- Custom Error Handlers ---
+    r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        pageHandler.ShowErrorPage(w, "404", "Page Not Found", "The page you are looking for does not exist.")
+    })
+    r.MethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        pageHandler.ShowErrorPage(w, "405", "Method Not Allowed", "The method is not allowed for this resource.")
+    })
+
+    logger.Info("HTTP routes configured successfully")
+
+    // --- Server Configuration ---
+    port := ":8081"
+    if cfg.ServerPort != "" {
+        port = ":" + cfg.ServerPort
+    }
+    
+    srv := &http.Server{
+        Addr:         port,
+        Handler:      r,
+        ReadTimeout:  60 * time.Second,
+        WriteTimeout: 60 * time.Second,
+        IdleTimeout:  120 * time.Second,
+    }
+
+    initTime := time.Since(startTime)
+    logger.Info("🚀 server initialization completed", 
+        "initialization_time", initTime.String(),
+        "port", port,
+        "read_timeout", "15s",
+        "write_timeout", "15s",
+        "idle_timeout", "60s")
+
+    // --- Startup Logging ---
+    logger.Info("==================================================")
+    logger.Info("🤖 Internist AI - Medical Chat Assistant", 
+        "status", "ready")
+    logger.Info("🚀 server starting", "port", port)
+    logger.Info("🌐 local access", "url", fmt.Sprintf("http://localhost%s", port))
+    logger.Info("💬 chat interface", "url", fmt.Sprintf("http://localhost%s/chat", port))
+    logger.Info("🔒 admin panel", "url", fmt.Sprintf("http://localhost%s/admin", port))
+    logger.Info("🔄 server ready to accept connections")
+    logger.Info("==================================================")
+
+    // --- Start Server in Goroutine ---
+    go func() {
+        logger.Info("HTTP server starting", "address", srv.Addr)
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            logger.Error("server startup failed", "error", err, "address", srv.Addr)
+            os.Exit(1)
+        }
+        logger.Info("HTTP server stopped accepting new connections")
+    }()
+
+    // --- Graceful Shutdown ---
+    stop := make(chan os.Signal, 1)
+    signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+    receivedSignal := <-stop
+
+    logger.Info("🛑 shutdown signal received", 
+        "signal", receivedSignal.String(),
+        "initiating_graceful_shutdown", true)
+
+    shutdownStart := time.Now()
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+
+    if err := srv.Shutdown(ctx); err != nil {
+        logger.Error("server forced shutdown", "error", err, 
+            "timeout", "15s")
+        os.Exit(1)
+    }
+
+    shutdownTime := time.Since(shutdownStart)
+    totalUptime := time.Since(startTime)
+    
+    logger.Info("✅ server stopped gracefully", 
+        "shutdown_time", shutdownTime.String(),
+        "total_uptime", totalUptime.String())
 }

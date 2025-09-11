@@ -1,115 +1,80 @@
-// File: internal/services/pinecone_service.go
+// G:\go_internist\internal\services\pinecone_service.go
 package services
 
 import (
-	"context"
-	"errors"
-	"log"
-	"time"
-
-	"github.com/pinecone-io/go-pinecone/v4/pinecone"
-	"google.golang.org/protobuf/types/known/structpb"
+    "context"
+    "github.com/iyunix/go-internist/internal/services/pinecone"
+    pineconeSDK "github.com/pinecone-io/go-pinecone/v4/pinecone"  // ADD ALIAS
 )
 
-// PineconeService wraps the Pinecone client and config.
 type PineconeService struct {
-	client     *pinecone.Client
-	indexHost  string
-	namespace  string
-	timeout    time.Duration
-	maxRetries int
+    config        *pinecone.Config
+    clientService *pinecone.ClientService
+    retryService  *pinecone.RetryService
+    vectorService *pinecone.VectorService
+    logger        Logger
 }
 
-// NewPineconeService constructs a new service with default timeout and retry settings.
 func NewPineconeService(apiKey, indexHost, namespace string) (*PineconeService, error) {
-	pc, err := pinecone.NewClient(pinecone.NewClientParams{
-		ApiKey: apiKey,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &PineconeService{
-		client:     pc,
-		indexHost:  indexHost,
-		namespace:  namespace,
-		// Increased timeout to accommodate larger metadata payloads and index latency variability.
-		timeout:    20 * time.Second,
-		maxRetries: 3,
-	}, nil
+    // Create configuration with defaults
+    config := pinecone.DefaultConfig()
+    config.APIKey = apiKey
+    config.IndexHost = indexHost
+    config.Namespace = namespace
+    
+    // Validate configuration
+    if err := config.Validate(); err != nil {
+        return nil, pinecone.NewConfigError(err.Error())
+    }
+    
+    // Create logger
+    logger := &NoOpLogger{} // Will be replaced with production logger
+    
+    // Create modular components
+    clientService, err := pinecone.NewClientService(config, logger)
+    if err != nil {
+        return nil, err
+    }
+    
+    retryService := pinecone.NewRetryService(config, logger)
+    vectorService := pinecone.NewVectorService(clientService, retryService, config, logger)
+    
+    return &PineconeService{
+        config:        config,
+        clientService: clientService,
+        retryService:  retryService,
+        vectorService: vectorService,
+        logger:        logger,
+    }, nil
 }
 
-// indexConn returns a connection to the Pinecone index, already using configured host and namespace.
-func (s *PineconeService) indexConn() (*pinecone.IndexConnection, error) {
-	return s.client.Index(pinecone.NewIndexConnParams{
-		Host:      s.indexHost,
-		Namespace: s.namespace,
-	})
-}
-
-// retryWithTimeout runs a function with retries and a per-attempt timeout.
-func (s *PineconeService) retryWithTimeout(call func(ctx context.Context) error) error {
-	for attempt := 1; attempt <= s.maxRetries; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-		err := call(ctx)
-		cancel() // always call cancel to free resources
-		if err == nil {
-			return nil
-		}
-		log.Printf("[PineconeService] attempt %d/%d failed: %v", attempt, s.maxRetries, err)
-		if attempt < s.maxRetries {
-			time.Sleep(time.Duration(attempt) * time.Second) // backoff sleep
-		}
-	}
-	return errors.New("pinecone: operation failed after all retries")
-}
-
+// Vector Operations - UPDATE TYPE REFERENCES
 func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]any) error {
-	// Ensure metadata contains flat fields like source_file, section_heading, key_takeaways, text, and optionally a separate chunk_id if desired.
-	return s.retryWithTimeout(func(ctx context.Context) error {
-		idx, err := s.indexConn()
-		if err != nil {
-			return err
-		}
-		metadataStruct, err := structpb.NewStruct(metadata)
-		if err != nil {
-			return err
-		}
-		vectors := []*pinecone.Vector{
-			{
-				Id:       id,
-				Values:   &values,
-				Metadata: metadataStruct,
-			},
-		}
-		_, err = idx.UpsertVectors(ctx, vectors)
-		return err
-	})
+    return s.vectorService.UpsertVector(ctx, id, values, metadata)
 }
 
-// QuerySimilar returns the top K most similar vectors to the given embedding.
-// Matches include Id, Score (float32), and Metadata used downstream for citations.
-func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]*pinecone.ScoredVector, error) {
-	var result []*pinecone.ScoredVector
-	err := s.retryWithTimeout(func(ctx context.Context) error {
-		idx, err := s.indexConn()
-		if err != nil {
-			return err
-		}
-		resp, err := idx.QueryByVectorValues(ctx, &pinecone.QueryByVectorValuesRequest{
-			Vector:          embedding,
-			TopK:            uint32(topK),
-			IncludeValues:   false,
-			IncludeMetadata: true,
-		})
-		if err != nil {
-			return err
-		}
-		result = resp.Matches
-		return nil
-	})
-	if err != nil {
-		log.Printf("[PineconeService] QuerySimilar failed: %v", err)
-		return nil, err
-	}
-	return result, nil
+func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]*pineconeSDK.ScoredVector, error) {
+    return s.vectorService.QuerySimilar(ctx, embedding, topK)
+}
+
+func (s *PineconeService) DeleteVector(ctx context.Context, id string) error {
+    return s.vectorService.DeleteVector(ctx, id)
+}
+
+func (s *PineconeService) FetchVector(ctx context.Context, id string) (*pineconeSDK.Vector, error) {
+    return s.vectorService.FetchVector(ctx, id)
+}
+
+// Service Management
+func (s *PineconeService) HealthCheck(ctx context.Context) error {
+    return s.clientService.HealthCheck(ctx)
+}
+
+func (s *PineconeService) GetStatus(ctx context.Context) pinecone.ServiceStatus {
+    return s.clientService.GetStatus(ctx)
+}
+
+// Retry Operations
+func (s *PineconeService) RetryWithTimeout(call func(ctx context.Context) error) error {
+    return s.retryService.RetryWithTimeout(call)
 }

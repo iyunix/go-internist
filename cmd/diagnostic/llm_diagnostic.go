@@ -1,75 +1,54 @@
-// File: cmd/diagnostics/jabir_test.go
+// File: cmd/diagnostic/llm_diagnostic.go
 package main
 
 import (
-	"context"
-	"log"
-	"os"
-	"time"
+    "context"
+    "fmt"
+    "log"
+    "os"
 
-	"github.com/iyunix/go-internist/internal/services"
-	"github.com/joho/godotenv"
+    openai "github.com/sashabaranov/go-openai"
+    "github.com/joho/godotenv"
 )
 
 func main() {
-	log.Println("--- Running Jabir LLM Performance Test ---")
+    fmt.Println("🚀 Testing Jabir with Go OpenAI SDK...")
 
-	// --- Test Parameters ---
-	const testRuns = 3 // Run the test 3 times to get a stable average
+    // Load environment variables
+    if err := godotenv.Load(`G:\go_internist\.env`); err != nil {
+        log.Printf("Warning: Could not load .env file: %v", err)
+    }
 
-	// --- 1. Load Configuration from .env file ---
-	if err := godotenv.Load(".env"); err != nil {
-		log.Fatalf("FATAL: Error loading .env file. Make sure it exists at the project root. Error: %v", err)
-	}
+    apiKey := os.Getenv("JABIR_API_KEY")
+    if apiKey == "" {
+        log.Fatal("JABIR_API_KEY not set in environment")
+    }
 
-	// --- 2. Get and Validate Jabir Environment Variable ---
-	jabirAPIKey := getEnvOrFatal("JABIR_API_KEY")
+    fmt.Printf("✅ API Key: %s\n", apiKey)
 
-	// --- 3. Initialize AI Service for Jabir ---
-	// We provide the specific BaseURL for the Jabir project.
-	aiService := services.NewAIService(
-		"", // No embedding key needed
-		jabirAPIKey,
-		"", // No embedding URL needed
-		"https://openai.jabirproject.org/v1", // Jabir LLM Base URL
-		"", // No embedding model name needed
-	)
+    // Initialize client with custom API key and base URL (exactly like Python)
+    config := openai.DefaultConfig(apiKey)
+    config.BaseURL = "https://openai.jabirproject.org/v1"
+    client := openai.NewClientWithConfig(config)
 
-	testPrompt := "Explain what a beta-blocker is in simple terms, in about 100 words."
-	log.Printf("Test Prompt: \"%s\"\n\n", testPrompt)
-	log.Printf("[INFO] Running %d completion tests...\n", testRuns)
+    // Create a chat completion (exactly like Python)
+    resp, err := client.CreateChatCompletion(
+        context.Background(),
+        openai.ChatCompletionRequest{
+            Model: "jabir-400b",
+            Messages: []openai.ChatCompletionMessage{
+                {
+                    Role:    openai.ChatMessageRoleUser,
+                    Content: "What is the answer to life, universe and everything?",
+                },
+            },
+        },
+    )
 
-	// --- 4. Measure LLM Completion Time (multiple runs) ---
-	var totalCompletionDuration time.Duration
+    if err != nil {
+        log.Fatalf("❌ Chat completion failed: %v", err)
+    }
 
-	for i := 1; i <= testRuns; i++ {
-		startCompletion := time.Now()
-		// Call the GetCompletion function with the specific model name "jabir-400b"
-		reply, err := aiService.GetCompletion(context.Background(), "jabir-400b", testPrompt)
-		if err != nil {
-			log.Printf("ERROR: Completion run #%d failed: %v", i, err)
-			continue
-		}
-		durationCompletion := time.Since(startCompletion)
-		totalCompletionDuration += durationCompletion
-		log.Printf("[TIMING] Completion run #%d took: %s (response length: %d)", i, durationCompletion, len(reply))
-	}
-
-	// --- 5. Print Summary ---
-	if testRuns > 0 {
-		avgCompletionTime := totalCompletionDuration / time.Duration(testRuns)
-		log.Printf("\n--- Test Summary ---")
-		log.Printf("Average completion latency over %d runs: %s", testRuns, avgCompletionTime)
-		log.Println("--------------------")
-	}
+    // Print the response (exactly like Python)
+    fmt.Printf("✅ Response: %s\n", resp.Choices[0].Message.Content)
 }
-
-// getEnvOrFatal retrieves an environment variable or exits if it's not set.
-func getEnvOrFatal(key string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		log.Fatalf("FATAL: Environment variable %s is not set in your .env file.", key)
-	}
-	return value
-}
-
