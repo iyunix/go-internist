@@ -3,62 +3,63 @@ package services
 import (
     "context"
     "strings"
-    
+
     "github.com/iyunix/go-internist/internal/domain"
-    "github.com/iyunix/go-internist/internal/repository"
-    "github.com/iyunix/go-internist/internal/services/chat"
+    chatservice "github.com/iyunix/go-internist/internal/services/chat"
+    "github.com/iyunix/go-internist/internal/repository/chat"
+    "github.com/iyunix/go-internist/internal/repository/message"
     "github.com/pinecone-io/go-pinecone/v4/pinecone"
 )
 
 type ChatService struct {
-    config          *chat.Config
-    chatRepo        repository.ChatRepository
-    messageRepo     repository.MessageRepository
-    streamService   *chat.StreamingService
-    ragService      *chat.RAGService
-    sourceExtractor *chat.SourceExtractor
+    config          *chatservice.Config
+    chatRepo        chat.ChatRepository
+    messageRepo     message.MessageRepository
+    streamService   *chatservice.StreamingService
+    ragService      *chatservice.RAGService
+    sourceExtractor *chatservice.SourceExtractor
     logger          Logger
 }
 
 func NewChatService(
-    chatRepo repository.ChatRepository,
-    messageRepo repository.MessageRepository,
+    chatRepo chat.ChatRepository,
+    messageRepo message.MessageRepository,
     aiService *AIService,
     pineconeService *PineconeService,
     retrievalTopK int,
 ) (*ChatService, error) {
     // Validate dependencies
     if chatRepo == nil {
-        return nil, chat.NewValidationError("constructor", "chat repository is required")
+        return nil, chatservice.NewValidationError("constructor", "chat repository is required")
     }
     if messageRepo == nil {
-        return nil, chat.NewValidationError("constructor", "message repository is required")
+        return nil, chatservice.NewValidationError("constructor", "message repository is required")
     }
     if aiService == nil {
-        return nil, chat.NewValidationError("constructor", "AI service is required")
+        return nil, chatservice.NewValidationError("constructor", "AI service is required")
     }
     if pineconeService == nil {
-        return nil, chat.NewValidationError("constructor", "Pinecone service is required")
+        return nil, chatservice.NewValidationError("constructor", "Pinecone service is required")
     }
 
     // Create configuration
-    config := chat.DefaultConfig()
+    config := chatservice.DefaultConfig()
     if retrievalTopK > 0 {
         config.RetrievalTopK = retrievalTopK
     }
 
     // Validate configuration
     if err := config.Validate(); err != nil {
-        return nil, chat.NewValidationError("config", err.Error())
+        return nil, chatservice.NewValidationError("config", err.Error())
     }
 
     // Create logger
     logger := &NoOpLogger{}
 
     // Create modular components
-    ragService := chat.NewRAGService(config, logger)
-    sourceExtractor := chat.NewSourceExtractor(config, logger)
-    streamService := chat.NewStreamingService(
+    ragService := chatservice.NewRAGService(config, logger)
+    sourceExtractor := chatservice.NewSourceExtractor(config, logger)
+    streamService := chatservice.NewStreamingService(
         config, chatRepo, messageRepo, aiService, pineconeService,
         ragService, sourceExtractor, logger,
     )
@@ -77,7 +78,7 @@ func NewChatService(
 // Basic chat operations
 func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string) (*domain.Chat, error) {
     if strings.TrimSpace(title) == "" {
-        return nil, chat.NewValidationError("create_chat", "chat title cannot be empty")
+        return nil, chatservice.NewValidationError("create_chat", "chat title cannot be empty")
     }
     if len(title) > 100 {
         title = title[:100]
@@ -86,7 +87,7 @@ func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string)
     newChat := &domain.Chat{UserID: userID, Title: title}
     createdChat, err := s.chatRepo.Create(ctx, newChat)
     if err != nil {
-        return nil, chat.NewRAGError("create_chat", "could not create chat", err)
+        return nil, chatservice.NewRAGError("create_chat", "could not create chat", err)
     }
     return createdChat, nil
 }
@@ -98,7 +99,7 @@ func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.C
 func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) ([]domain.Message, error) {
     chatRecord, err := s.chatRepo.FindByID(ctx, chatID)
     if err != nil || chatRecord.UserID != userID {
-        return nil, chat.NewUnauthorizedError(userID, chatID)  // FIXED
+        return nil, chatservice.NewUnauthorizedError(userID, chatID)
     }
     return s.messageRepo.FindByChatID(ctx, chatID)
 }
@@ -106,7 +107,7 @@ func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) 
 func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error {
     chatRecord, err := s.chatRepo.FindByID(ctx, chatID)
     if err != nil || chatRecord.UserID != userID {
-        return chat.NewUnauthorizedError(userID, chatID)  // FIXED
+        return chatservice.NewUnauthorizedError(userID, chatID)
     }
     return s.chatRepo.Delete(ctx, chatID, userID)
 }

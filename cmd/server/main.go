@@ -1,3 +1,4 @@
+// G:\go_internist\cmd\server\main.go
 package main
 
 import (
@@ -19,7 +20,9 @@ import (
     "github.com/iyunix/go-internist/internal/domain"
     "github.com/iyunix/go-internist/internal/handlers"
     "github.com/iyunix/go-internist/internal/middleware"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
+    "github.com/iyunix/go-internist/internal/repository/chat"
+    "github.com/iyunix/go-internist/internal/repository/message"
     "github.com/iyunix/go-internist/internal/services"
     "github.com/iyunix/go-internist/internal/services/sms"
     "github.com/iyunix/go-internist/internal/services/admin_services"
@@ -76,9 +79,9 @@ func main() {
 
     // --- Repositories ---
     logger.Info("initializing repositories")
-    userRepo := repository.NewGormUserRepository(db)
-    chatRepo := repository.NewChatRepository(db)
-    messageRepo := repository.NewMessageRepository(db)
+    userRepo := user.NewGormUserRepository(db)
+    chatRepo := chat.NewChatRepository(db)
+    messageRepo := message.NewMessageRepository(db)
     logger.Info("repositories initialized successfully")
 
     // --- Services ---

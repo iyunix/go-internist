@@ -10,19 +10,19 @@ import (
     "github.com/golang-jwt/jwt/v5"
     "golang.org/x/crypto/bcrypt"
     "github.com/iyunix/go-internist/internal/domain"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
 )
 
 // FIXED: Remove duplicate declaration, keep only one
 type AuthService struct {
-    userRepo     repository.UserRepository
+    userRepo     user.UserRepository
     jwtSecretKey string
     adminPhone   string
     logger       Logger
 }
 
 // NewAuthService creates a new authentication service
-func NewAuthService(userRepo repository.UserRepository, jwtSecretKey, adminPhone string, logger Logger) *AuthService {
+func NewAuthService(userRepo user.UserRepository, jwtSecretKey, adminPhone string, logger Logger) *AuthService {
     return &AuthService{
         userRepo:     userRepo,
         jwtSecretKey: jwtSecretKey,

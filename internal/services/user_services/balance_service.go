@@ -7,17 +7,17 @@ import (
     "fmt"
 
     "github.com/iyunix/go-internist/internal/domain"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
 )
 
 // BalanceService handles user credit and balance management
 type BalanceService struct {
-    userRepo repository.UserRepository
+    userRepo user.UserRepository
     logger   Logger
 }
 
 // NewBalanceService creates a new balance service
-func NewBalanceService(userRepo repository.UserRepository, logger Logger) *BalanceService {
+func NewBalanceService(userRepo user.UserRepository, logger Logger) *BalanceService {
     return &BalanceService{
         userRepo: userRepo,
         logger:   logger,

@@ -6,7 +6,7 @@ import (
     "fmt"
 
     "github.com/iyunix/go-internist/internal/domain"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
 )
 
 // Logger interface for admin operations
@@ -19,12 +19,12 @@ type Logger interface {
 
 // AdminService provides functionalities for administrative tasks.
 type AdminService struct {
-    userRepo repository.UserRepository
+    userRepo user.UserRepository
     logger   Logger
 }
 
 // NewAdminService creates a new instance of AdminService.
-func NewAdminService(userRepo repository.UserRepository, logger Logger) *AdminService {
+func NewAdminService(userRepo user.UserRepository, logger Logger) *AdminService {
     return &AdminService{
         userRepo: userRepo,
         logger:   logger,

@@ -5,21 +5,23 @@ import (
     "context"
     "strings"    
     "github.com/iyunix/go-internist/internal/domain"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/chat"
+    "github.com/iyunix/go-internist/internal/repository/message"
     "github.com/pinecone-io/go-pinecone/v4/pinecone"
 
 )
 
 type StreamingService struct {
-    config         *Config
-    chatRepo       repository.ChatRepository
-    messageRepo    repository.MessageRepository
-    aiService      AIProvider
+    config          *Config
+    chatRepo        chat.ChatRepository
+    messageRepo     message.MessageRepository
+    aiService       AIProvider
     pineconeService PineconeProvider
-    ragService     *RAGService
+    ragService      *RAGService
     sourceExtractor *SourceExtractor
-    logger         Logger
+    logger          Logger
 }
+
 
 type AIProvider interface {
     CreateEmbedding(ctx context.Context, text string) ([]float32, error)
@@ -32,8 +34,8 @@ type PineconeProvider interface {
 
 func NewStreamingService(
     config *Config,
-    chatRepo repository.ChatRepository,
-    messageRepo repository.MessageRepository,
+    chatRepo chat.ChatRepository,
+    messageRepo message.MessageRepository,
     aiService AIProvider,
     pineconeService PineconeProvider,
     ragService *RAGService,

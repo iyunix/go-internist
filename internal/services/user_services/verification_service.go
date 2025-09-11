@@ -8,7 +8,7 @@ import (
     "math/rand"
     "strconv"
     "time"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
 )
 
 // SMSService interface for sending verification codes
@@ -18,13 +18,13 @@ type SMSService interface {
 
 // VerificationService handles SMS verification workflows
 type VerificationService struct {
-    userRepo   repository.UserRepository
+    userRepo   user.UserRepository
     smsService SMSService
     logger     Logger
 }
 
 // NewVerificationService creates a new verification service
-func NewVerificationService(userRepo repository.UserRepository, smsService SMSService, logger Logger) *VerificationService {
+func NewVerificationService(userRepo user.UserRepository, smsService SMSService, logger Logger) *VerificationService {
     return &VerificationService{
         userRepo:   userRepo,
         smsService: smsService,

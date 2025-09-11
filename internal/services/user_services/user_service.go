@@ -6,19 +6,19 @@ import (
     "fmt"
 
     "github.com/iyunix/go-internist/internal/domain"
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
 )
 
 // UserService handles core user management operations
 type UserService struct {
-    userRepo     repository.UserRepository
+    userRepo     user.UserRepository
     jwtSecretKey string
     adminPhone   string
     logger       Logger
 }
 
 // NewUserService creates a new user service
-func NewUserService(userRepo repository.UserRepository, jwtSecretKey, adminPhone string, logger Logger) *UserService {
+func NewUserService(userRepo user.UserRepository, jwtSecretKey, adminPhone string, logger Logger) *UserService {
     return &UserService{
         userRepo:     userRepo,
         jwtSecretKey: jwtSecretKey,

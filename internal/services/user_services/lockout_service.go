@@ -5,7 +5,7 @@ import (
     "fmt"
     "time"
 
-    "github.com/iyunix/go-internist/internal/repository"
+    "github.com/iyunix/go-internist/internal/repository/user"
 )
 
 const (
@@ -15,12 +15,12 @@ const (
 
 // LockoutService handles account security and brute force protection
 type LockoutService struct {
-    userRepo repository.UserRepository
+    userRepo user.UserRepository
     logger   Logger
 }
 
 // NewLockoutService creates a new lockout service
-func NewLockoutService(userRepo repository.UserRepository, logger Logger) *LockoutService {
+func NewLockoutService(userRepo user.UserRepository, logger Logger) *LockoutService {
     return &LockoutService{
         userRepo: userRepo,
         logger:   logger,

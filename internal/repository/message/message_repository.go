@@ -1,10 +1,10 @@
-// File: internal/repository/message_repository.go
-package repository
+package message
 
 import (
     "context"
     "errors"
     "log"
+
     "github.com/iyunix/go-internist/internal/domain"
     "gorm.io/gorm"
 )
@@ -26,22 +26,6 @@ func (r *gormMessageRepository) FindByChatID(ctx context.Context, chatID uint) (
     if err != nil {
         log.Printf("[MessageRepository] FindByChatID error: chat_id=%d %v", chatID, err)
         return nil, errors.New("database error fetching messages")
-    }
-    return messages, nil
-}
-
-// Paginated message fetch (optional)
-func (r *gormMessageRepository) FindByChatIDPaginated(ctx context.Context, chatID uint, offset, limit int) ([]domain.Message, error) {
-    var messages []domain.Message
-    err := r.db.WithContext(ctx).
-        Where("chat_id = ?", chatID).
-        Order("created_at asc").
-        Offset(offset).
-        Limit(limit).
-        Find(&messages).Error
-    if err != nil {
-        log.Printf("[MessageRepository] Paginated FindByChatID error: chat_id=%d %v", chatID, err)
-        return nil, errors.New("database error fetching paginated messages")
     }
     return messages, nil
 }

@@ -5,12 +5,12 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/iyunix/go-internist/internal/repository"
+	"github.com/iyunix/go-internist/internal/repository/user"
 )
 
 // RequireAdmin is a middleware that checks if the authenticated user has admin privileges.
 // It MUST be used AFTER the standard JWT authentication middleware.
-func RequireAdmin(userRepo repository.UserRepository) func(http.Handler) http.Handler {
+func RequireAdmin(userRepo user.UserRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// 1. Get the userID from the context. The JWT middleware should have already placed it there.
