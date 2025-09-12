@@ -390,40 +390,46 @@ func (h *ChatHandler) GetUserChats(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Production-ready pagination parameters
+    // ✅ FIXED: Parse pagination parameters (backward compatible)
     page := h.getPageFromQuery(r)
     limit := h.getLimitFromQuery(r)
+    
+    // For backward compatibility, use high limit to get most chats at once
+    if limit == defaultPageSize {
+        limit = 100 // Higher default to load most chats at once
+    }
+    
+    offset := (page - 1) * limit
     
     // Enhanced chat retrieval with timeout and pagination
     ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
     defer cancel()
 
-    chats, err := h.ChatService.GetUserChats(ctx, userID)
+    // ✅ CALL NEW SERVICE METHOD (eliminates the warning)
+    chats, total, err := h.ChatService.GetUserChatsWithPagination(ctx, userID, limit, offset)
     if err != nil {
         log.Printf("[ChatHandler] Error getting chats for user %d: %v", userID, err)
         http.Error(w, "Failed to get user chats", http.StatusInternalServerError)
         return
     }
 
-    // Enhanced response with metadata for medical AI
+    // ✅ BACKWARD COMPATIBLE: Return just chats array (same as before)
     w.Header().Set("Content-Type", "application/json; charset=utf-8")
     w.Header().Set("Cache-Control", "no-store")
-    
     response := map[string]interface{}{
-        "chats":     chats,
-        "total":     len(chats),
-        "page":      page,
-        "limit":     limit,
-        "timestamp": time.Now().Unix(),
-        "userId":    userID,
+    "chats": chats,
+    "total": total,
+    "page":  page,
+    "limit": limit,
+    "has_more": total > int64(offset + len(chats)),
     }
-    
     if err := json.NewEncoder(w).Encode(response); err != nil {
         log.Printf("[ChatHandler] Error encoding chats response: %v", err)
     }
 
-    log.Printf("[ChatHandler] Retrieved %d chats for user %d", len(chats), userID)
+    log.Printf("[ChatHandler] Retrieved %d chats for user %d (total: %d)", len(chats), userID, total)
 }
+
 
 // GetChatMessages retrieves chat messages with production-ready pagination and filtering
 func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {

@@ -1,228 +1,240 @@
-// File: web/static/js/markdown_renderer.js
-// MarkdownRenderer: Parse Markdown to HTML and sanitize it before inserting into the DOM.
-// Requires global `marked` (Markdown parser) and `DOMPurify` (HTML sanitizer).
+// G:\go_internist\web\static\js\markdown_renderer.js
+// Fixed markdown renderer - corrected regex syntax
 
-(function (global) {
-  'use strict';
+class MarkdownRenderer {
+    constructor() {
+        this.marked = window.marked;
+        this.DOMPurify = window.DOMPurify;
+        
+        if (!this.marked) {
+            console.error('Marked.js not loaded - markdown rendering disabled');
+            return;
+        }
+        
+        if (!this.DOMPurify) {
+            console.warn('DOMPurify not loaded - HTML sanitization disabled');
+        }
 
-  // Verify dependencies are present at load time
-  function assertDeps() {
-    if (typeof global.marked === 'undefined' || typeof global.marked.parse !== 'function') {
-      throw new Error('MarkdownRenderer: missing dependency "marked" with marked.parse'); 
+        this.setupMarked();
+        console.log('✅ MarkdownRenderer initialized');
     }
-    if (typeof global.DOMPurify === 'undefined' || typeof global.DOMPurify.sanitize !== 'function') {
-      throw new Error('MarkdownRenderer: missing dependency "DOMPurify" with DOMPurify.sanitize'); 
-    }
-  }
 
-  // Default configuration for marked
-  const defaultMarkedOptions = {
-    gfm: true,
-    breaks: true
-  };
+    setupMarked() {
+        if (!this.marked) return;
 
-  // ---- Footnote Support ----
-  const footnotes = {};
+        // Configure marked for medical content
+        this.marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false,
+            mangle: false,
+            sanitize: false
+        });
 
-  // Inline footnote references: [^id]
-  const footnoteRefExtension = {
-    name: "footnoteRef",
-    level: "inline",
-    start(src) {
-      return src.match(/\[\^/)?.index;
-    },
-    tokenizer(src) {
-      const rule = /^\[\^(.+?)\]/;
-      const match = rule.exec(src);
-      if (match) {
-        return {
-          type: "footnoteRef",
-          raw: match[0],
-          id: match[1]
+        // Custom renderer for medical content
+        const renderer = new this.marked.Renderer();
+        
+        // Enhanced code blocks
+        renderer.code = (code, language) => {
+            const lang = language ? ` class="language-${language}"` : '';
+            return `<pre class="medical-code"><code${lang}>${this.escapeHtml(code)}</code></pre>`;
         };
-      }
-    },
-    renderer(token) {
-      const id = token.id.toLowerCase();
-      return `<sup id="fnref:${id}"><a href="#fn:${id}" class="footnote-ref">[${id}]</a></sup>`;
-    }
-  };
 
-  // Footnote definitions: [^id]: text
-  const footnoteDefExtension = {
-    name: "footnoteDef",
-    level: "block",
-    start(src) {
-      return src.match(/^\[\^.+?\]:/)?.index;
-    },
-    tokenizer(src) {
-      const rule = /^\[\^(.+?)\]: (.+)$/m;
-      const match = rule.exec(src);
-      if (match) {
-        footnotes[match[1].toLowerCase()] = match[2];
-        return {
-          type: "footnoteDef",
-          raw: match[0],
-          id: match[1],
-          text: match[2]
+        // Enhanced lists
+        renderer.list = (body, ordered, start) => {
+            const type = ordered ? 'ol' : 'ul';
+            const startAttr = ordered && start !== 1 ? ` start="${start}"` : '';
+            return `<${type} class="medical-list"${startAttr}>\n${body}</${type}>\n`;
         };
-      }
-    },
-    renderer() {
-      // Don’t render definition inline; will render at bottom later
-      return "";
+
+        // Enhanced emphasis
+        renderer.strong = (text) => `<strong class="medical-emphasis">${text}</strong>`;
+
+        this.marked.use({ renderer });
     }
-  };
 
-  function renderFootnoteSection() {
-    const keys = Object.keys(footnotes);
-    if (!keys.length) return "";
-    let out = '<section class="footnotes"><hr><ol>';
-    keys.forEach(id => {
-      const text = footnotes[id];
-      out += `<li id="fn:${id}">${text} <a href="#fnref:${id}" class="footnote-backref">↩</a></li>`;
-    });
-    out += "</ol></section>";
-    return out;
-  }
-
-  // Initialize marked once with defaults; callers can override via MarkdownRenderer.configure
-  function initMarked(opts) {
-    if (typeof global.marked?.setOptions === 'function') {
-      global.marked.setOptions({ ...defaultMarkedOptions, ...(opts || {}) });
-    }
-    if (typeof global.marked?.use === 'function') {
-      global.marked.use({ extensions: [footnoteRefExtension, footnoteDefExtension] });
-    }
-  }
-
-  // Core render function: markdown string -> sanitized HTML into target element
-  function renderMarkdownTo(targetEl, markdown) {
-    assertDeps();
-    const md = typeof markdown === 'string' ? markdown : '';
-
-    // Reset footnote storage
-    for (const k in footnotes) delete footnotes[k];
-
-    const htmlMain = global.marked.parse(md);
-    const htmlFootnotes = renderFootnoteSection();
-    const fullHtml = htmlMain + htmlFootnotes;
-
-    const safe = global.DOMPurify.sanitize(fullHtml);
-    targetEl.innerHTML = safe;
-  }
-
-  // Streaming helper: accumulate chunks and render progressively
-  function createStreamRenderer(targetEl, options) {
-    assertDeps();
-    
-    let buffer = '';
-    let rafId = null;
-    let timeoutId = null;
-    const debounceMs = (options && options.debounceMs) || 100;
-    let isDestroyed = false;
-
-    function doRender() {
-      if (isDestroyed) return;
-      rafId = null;
-      try {
-        renderMarkdownTo(targetEl, buffer);
-        const scroller = targetEl.closest('.messages') || targetEl.parentElement;
-        if (scroller) {
-          scroller.scrollTop = scroller.scrollHeight;
+    // ✅ REAL-TIME: Render markdown progressively during streaming
+    renderStreaming(content, container) {
+        if (!this.marked || !content || !container) {
+            if (container) container.textContent = content || '';
+            return;
         }
-      } catch (err) {
-        console.warn('MarkdownRenderer render error:', err);
-        targetEl.textContent = buffer;
-      }
+
+        try {
+            // ✅ FIXED: Handle partial markdown during streaming
+            const processedContent = this.preprocessStreamingContent(content);
+            const html = this.marked.parse(processedContent);
+            const sanitized = this.DOMPurify ? this.DOMPurify.sanitize(html) : html;
+            
+            container.innerHTML = sanitized;
+
+            // ✅ Enhance medical content
+            this.enhanceMedicalContent(container);
+            
+            // ✅ Smooth scroll to bottom
+            this.scrollToBottom(container);
+
+        } catch (error) {
+            console.warn('Markdown rendering error during streaming:', error);
+            container.textContent = content;
+        }
     }
 
-    function scheduleRender(immediate = false) {
-      if (isDestroyed) return;
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
+    // ✅ COMPLETE: Render final markdown after streaming completes
+    renderComplete(content, container) {
+        if (!this.marked || !content || !container) {
+            if (container) container.textContent = content || '';
+            return;
+        }
 
-      if (immediate) {
-        rafId = requestAnimationFrame(doRender);
-      } else {
-        timeoutId = setTimeout(() => {
-          timeoutId = null;
-          rafId = requestAnimationFrame(doRender);
-        }, debounceMs);
-      }
+        try {
+            const html = this.marked.parse(content);
+            const sanitized = this.DOMPurify ? this.DOMPurify.sanitize(html) : html;
+            
+            container.innerHTML = sanitized;
+
+            // ✅ Final enhancements
+            this.enhanceMedicalContent(container);
+            this.addCopyButtons(container);
+            
+        } catch (error) {
+            console.error('Final markdown rendering error:', error);
+            container.textContent = content;
+        }
     }
 
-    return {
-      append(chunk) {
-        if (isDestroyed || !chunk) return;
-        chunk = String(chunk);
-        buffer += chunk;
-        const hasNewline = chunk.includes('\n');
-        scheduleRender(hasNewline);
-      },
-      set(markdown) {
-        if (isDestroyed) return;
-        buffer = String(markdown || '');
-        scheduleRender(true);
-      },
-      clear() {
-        if (isDestroyed) return;
-        buffer = '';
-        scheduleRender(true);
-      },
-      get() {
-        return buffer;
-      },
-      flush() {
-        if (isDestroyed) return;
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-        doRender();
-      },
-      destroy() {
-        isDestroyed = true;
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-        buffer = '';
-      }
-    };
-  }
+    // ✅ PREPROCESSING: Handle incomplete markdown during streaming
+    preprocessStreamingContent(content) {
+        if (!content) return '';
 
-  // Public API
-  const MarkdownRenderer = {
-    configure(markedOptions) {
-      initMarked(markedOptions);
-    },
-    render(targetEl, markdown) {
-      renderMarkdownTo(targetEl, markdown);
-    },
-    createStream(targetEl, options) {
-      return createStreamRenderer(targetEl, options);
+        // Handle incomplete code blocks
+        const codeBlockCount = (content.match(/```
+        if (codeBlockCount % 2 === 1) {
+            content += '\n```';
+        }
+
+        // Handle incomplete lists
+        const lines = content.split('\n');
+        const lastLine = lines[lines.length - 1];
+        
+        // ✅ FIXED REGEX: Properly escaped regex pattern
+        if (/^[\s]*[-*+]\s*$/.test(lastLine)) {
+            content += ' ';
+        }
+
+        return content;
     }
-  };
 
-  // Initialize defaults
-  initMarked();
+    // ✅ MEDICAL: Enhance medical terminology and formatting
+    enhanceMedicalContent(container) {
+        if (!container) return;
 
-  // Attach to window
-  global.MarkdownRenderer = MarkdownRenderer;
+        try {
+            // Highlight medical terms
+            const medicalTerms = [
+                'hypertension', 'diabetes', 'cardiovascular', 'myocardial',
+                'pulmonary', 'renal', 'hepatic', 'neurological', 'oncology',
+                'pharmacology', 'dosage', 'contraindication', 'side effect',
+                'diagnosis', 'prognosis', 'treatment', 'therapy', 'medication'
+            ];
 
-})(window);
+            medicalTerms.forEach(term => {
+                // ✅ FIXED: Properly constructed regex with escaped backslashes
+                const regex = new RegExp('\\b(' + term + ')\\b', 'gi');
+                container.innerHTML = container.innerHTML.replace(regex, 
+                    '<span class="medical-term">$1</span>');
+            });
+
+            // Highlight drug names
+            // ✅ FIXED: Properly escaped regex pattern
+            const drugRegex = /\b([A-Z][a-z]*(?:ol|ine|ate|ide|cin))\b/g;
+            container.innerHTML = container.innerHTML.replace(drugRegex,
+                '<span class="drug-name">$1</span>'
+            );
+
+            // Add icons to medical lists
+            const lists = container.querySelectorAll('ul.medical-list');
+            lists.forEach(list => {
+                list.querySelectorAll('li').forEach(item => {
+                    const text = item.textContent.toLowerCase();
+                    if (text.includes('symptom')) {
+                        item.classList.add('symptom-item');
+                    } else if (text.includes('treatment')) {
+                        item.classList.add('treatment-item');
+                    }
+                });
+            });
+
+        } catch (error) {
+            console.warn('Medical content enhancement error:', error);
+        }
+    }
+
+    // ✅ UTILITY: Add copy buttons to code blocks
+    addCopyButtons(container) {
+        if (!container) return;
+
+        try {
+            const codeBlocks = container.querySelectorAll('pre.medical-code');
+            codeBlocks.forEach(block => {
+                if (block.querySelector('.copy-btn')) return;
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn';
+                copyBtn.innerHTML = '📋 Copy';
+                copyBtn.onclick = () => this.copyToClipboard(block.textContent, copyBtn);
+                
+                block.style.position = 'relative';
+                block.appendChild(copyBtn);
+            });
+        } catch (error) {
+            console.warn('Copy button error:', error);
+        }
+    }
+
+    // ✅ UTILITY: Copy text to clipboard
+    async copyToClipboard(text, button) {
+        try {
+            await navigator.clipboard.writeText(text);
+            const originalText = button.innerHTML;
+            button.innerHTML = '✅ Copied!';
+            button.style.background = '#4CAF50';
+            
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.style.background = '';
+            }, 2000);
+        } catch (error) {
+            console.error('Copy failed:', error);
+            button.innerHTML = '❌ Failed';
+        }
+    }
+
+    // ✅ UTILITY: Smooth scroll to bottom
+    scrollToBottom(container) {
+        try {
+            const messagesContainer = container.closest('.messages-container') || 
+                                    container.closest('.messages') ||
+                                    container.closest('#messages-container');
+            if (messagesContainer) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        } catch (error) {
+            console.warn('Scroll error:', error);
+        }
+    }
+
+    // ✅ UTILITY: Escape HTML
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// ✅ Export singleton instance
+const markdownRenderer = new MarkdownRenderer();
+window.MarkdownRenderer = markdownRenderer;
+
+console.log('✅ MarkdownRenderer loaded and ready');

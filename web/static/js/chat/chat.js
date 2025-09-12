@@ -1,331 +1,406 @@
-// File: web/static/js/chat/chat.js
-// FIXED: Targeted skeleton removal that preserves message content
-// UPDATED: Added credit balance integration
+// G:\go_internist\web\static\js\chat\chat.js
+// Main Chat Controller with real-time streaming and pagination
 
-import { ChatUI } from './chat-ui.js';
-import { ChatAPI } from './chat-api.js';
-import { ChatStreamRenderer } from './chat-stream.js';
-import { Utils } from '../utils.js';
+class ChatManager {
+    constructor() {
+        this.currentChatId = null;
+        this.isInitialized = false;
+        this.isStreaming = false;
+        this.currentStream = null;
+        this.streamingContent = '';
+        this.currentPagination = null;
 
-class ChatApp {
-  constructor() {
-    this.elements = {
-      chatForm: document.getElementById("chatForm"),
-      chatInput: document.getElementById("chatInput"),
-      chatMessages: document.getElementById("chatMessages"),
-      newChatBtn: document.getElementById("newChatBtn"),
-      historyList: document.getElementById("historyList"),
-      quickActionsContainer: document.getElementById("quickActions"),
-      submitButton: null
-    };
-
-    if (!this.elements.chatForm) {
-      console.error("[ChatApp] Required chat elements not found");
-      return;
+        console.log('[ChatManager] Instance created');
     }
 
-    this.elements.submitButton = this.elements.chatForm.querySelector("button");
-    this.activeChatId = Utils.getUrlParam("id");
-
-    this.ui = new ChatUI(this.elements);
-    this.api = new ChatAPI();
-    this.isInitialized = false;
-  }
-
-  /**
-   * Remove skeleton loaders without removing actual messages
-   */
-  removeSkeletonLoaders() {
-    const skeletonLoaders = document.querySelectorAll('.skeleton-loader, .skeleton-container');
-    skeletonLoaders.forEach(el => el.remove());
-
-    const skeletonStatus = document.querySelectorAll('.skeleton-status, .skeleton-lines');
-    skeletonStatus.forEach(el => el.remove());
-
-    const loadingInputs = document.querySelectorAll('input.loading, button.loading, form.loading');
-    loadingInputs.forEach(el => el.classList.remove('loading'));
-  }
-
-  async init() {
-    try {
-      this.bindEvents();
-      await this.loadHistory();
-
-      if (this.activeChatId) {
-        await this.loadMessages(this.activeChatId);
-      } else {
-        this.renderDefaultQuickActions();
-      }
-
-      this.isInitialized = true;
-      console.log("[ChatApp] Initialized successfully");
-    } catch (err) {
-      console.error("[ChatApp] Failed to initialize:", err);
-    }
-  }
-
-  /**
-   * Render default quick actions
-   */
-  renderDefaultQuickActions() {
-    this.ui.renderQuickActions([
-      "What are the symptoms of diabetes?",
-      "How to treat high blood pressure?",
-      "Common causes of headaches"
-    ]);
-  }
-
-  async loadHistory() {
-    try {
-      const chats = await this.api.fetchHistory();
-      this.ui.renderHistory(chats);
-      this.ui.setActiveChat(this.activeChatId);
-    } catch (err) {
-      console.error("[ChatApp] Failed to load history:", err);
-    }
-  }
-
-  async loadMessages(chatId) {
-    this.ui.clearQuickActions();
-
-    if (!chatId) {
-      this.ui.clearMessages();
-      this.activeChatId = null;
-      this.ui.setActiveChat(null);
-      this.renderDefaultQuickActions();
-      return;
-    }
-
-    try {
-      console.log("[ChatApp] Loading messages for chat:", chatId);
-      const messages = await this.api.fetchMessages(chatId);
-
-      if (!messages) {
-        console.warn("[ChatApp] No messages for chat:", chatId);
-        return;
-      }
-
-      this.ui.renderMessages(messages);
-      this.activeChatId = chatId;
-      this.ui.setActiveChat(chatId);
-    } catch (err) {
-      console.error("[ChatApp] Failed to load messages:", err);
-      this.ui.displayMessage("Failed to load chat messages. Please try again.", "assistant");
-    }
-  }
-
-  /**
-   * Handle form submit: validate balance and question length
-   */
-  async handleSubmit(e) {
-    e.preventDefault();
-    const prompt = this.elements.chatInput.value.trim();
-    if (!prompt) return;
-
-    // Check credit balance
-    if (window.creditManager && !window.creditManager.canAskQuestion(prompt.length)) {
-      const currentBalance = window.creditManager.getCurrentBalance();
-      const chargeAmount = Math.max(100, prompt.length);
-
-      this.ui.displayMessage(
-        `Insufficient credits. You need ${chargeAmount}, but only have ${currentBalance}.`,
-        "assistant"
-      );
-      return;
-    }
-
-    // Check length limit
-    if (prompt.length > 1000) {
-      this.ui.displayMessage("Question too long. Please limit to 1000 characters.", "assistant");
-      return;
-    }
-
-    this.ui.clearQuickActions();
-    this.ui.displayMessage(prompt, "user");
-    this.ui.clearInput();
-    this.ui.resetTextareaHeight?.();
-    this.ui.toggleLoading(true);
-
-    let chatId = this.activeChatId;
-    if (!chatId) {
-      try {
-        chatId = await this.api.createChat(prompt);
-        window.history.pushState({ chatId }, "", `/chat?id=${chatId}`);
-        this.activeChatId = chatId;
-        await this.loadHistory();
-        this.ui.setActiveChat(chatId);
-      } catch (err) {
-        this.ui.displayMessage("Error: Could not create a new chat session.", "assistant");
-        this.ui.toggleLoading(false);
-        return;
-      }
-    }
-
-    // Deduct credits immediately
-    if (window.creditManager) {
-      const chargeAmount = Math.max(100, prompt.length);
-      window.creditManager.onQuestionAsked(chargeAmount);
-      console.log(`[ChatApp] Deducted ${chargeAmount} credits`);
-    }
-
-    this.streamResponse(chatId, prompt);
-  }
-
-  streamResponse(chatId, prompt) {
-    this.ui.displayMessage("", "assistant", { showLoader: true });
-    this.ui.updateSkeletonStatus?.('searching', 'Searching knowledge base...');
-    setTimeout(() => this.ui.updateSkeletonStatus?.('processing', 'Processing results...'), 800);
-    setTimeout(() => this.ui.updateSkeletonStatus?.('thinking', 'AI is thinking...'), 1600);
-
-    const streamRenderer = new ChatStreamRenderer(this.ui);
-    const eventSource = this.api.createStream(chatId, prompt);
-
-    eventSource.onmessage = (evt) => {
-      this.ui.replaceSkeletonWithContent?.();
-      streamRenderer.appendChunk(evt.data);
-    };
-
-    eventSource.addEventListener("metadata", (evt) => {
-      try {
-        const metadata = JSON.parse(evt.data);
-        if (metadata.type === "sources") this.ui.setSources?.(metadata.sources);
-        else if (metadata.type === "final_sources") {
-          this.ui.setSources?.(metadata.sources);
-          this.ui.addFootnote?.(metadata.sources);
+    // ✅ INITIALIZATION: Auto-load with pagination support
+    async initialize() {
+        if (this.isInitialized) {
+            console.log('[ChatManager] Already initialized, skipping...');
+            return;
         }
-      } catch (err) {
-        console.warn("[ChatApp] Failed to parse metadata:", err);
-      }
-    });
 
-    eventSource.addEventListener("done", () => {
-      if (eventSource.readyState !== EventSource.CLOSED) eventSource.close();
-      streamRenderer.finalize();
-      const sources = this.ui.getSources?.();
-      if (sources?.length) this.ui.addFootnote?.(sources);
-      this.ui.toggleLoading(false);
-      this.removeSkeletonLoaders();
-    });
+        console.log('🚀 [ChatManager] Initializing...');
 
-    eventSource.onerror = (err) => {
-      console.error("[ChatApp] Stream error:", err);
-      if (eventSource.readyState !== EventSource.CLOSED) eventSource.close();
-      streamRenderer.destroy();
+        try {
+            // Show loading state
+            ChatUI.showLoadingState('Loading your medical consultations...');
 
-      // Refresh balance after error
-      if (window.creditManager && !window.creditManager.isLoading) {
-        setTimeout(() => window.creditManager.loadBalance(), 1000);
-      }
+            // Initialize with pagination
+            const history = await ChatAPI.initialize();
 
-      this.ui.displayMessage("A streaming error occurred. Please try again.", "assistant");
-      this.ui.toggleLoading(false);
-      this.removeSkeletonLoaders();
-    };
-  }
+            if (history.hasHistory) {
+                console.log(`✅ Found ${history.chats.length} chats, auto-selecting first chat`);
 
-  handleTextareaInput() {
-    const textarea = this.elements.chatInput;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }
+                // Display chat list with pagination info
+                ChatUI.renderChatList(history.chats, history.pagination);
+                this.currentPagination = history.pagination;
 
-  handleTextareaKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      this.elements.chatForm.requestSubmit();
-    }
-  }
+                // Auto-select and display first chat
+                await this.selectChat(history.selectedChat.id, history.messages);
+                console.log('✅ Chat history loaded successfully');
 
-  handleQuickActionClick(e) {
-    if (e.target.classList.contains('quick-action-chip')) {
-      const prompt = e.target.textContent;
-      this.elements.chatInput.value = prompt;
-      this.elements.chatForm.requestSubmit();
-    }
-  }
+            } else {
+                console.log('ℹ️ No chat history found, showing empty state');
+                ChatUI.showEmptyState();
+            }
 
-  bindEvents() {
-    this.elements.chatForm.addEventListener("submit", (e) => this.handleSubmit(e));
-    this.elements.chatInput.addEventListener('input', () => this.handleTextareaInput());
-    this.elements.chatInput.addEventListener('keydown', (e) => this.handleTextareaKeydown(e));
+            // Load user balance
+            await this.updateUserBalance();
 
-    this.elements.newChatBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (this.activeChatId || this.elements.chatMessages.children.length > 0) {
-        window.history.pushState({}, "", "/chat");
-        this.loadMessages(null);
-      }
-    });
+            // Set up event listeners
+            this.setupEventListeners();
 
-    this.elements.historyList.addEventListener("click", async (e) => {
-      const link = e.target.closest("a");
-      if (!link) return;
+            this.isInitialized = true;
+            console.log('🎉 ChatManager initialization complete');
 
-      const historyItem = link.parentElement;
-      if (!historyItem || !historyItem.classList.contains("history-item")) return;
-
-      if (e.target.classList.contains("delete-chat-btn")) {
-        await this.handleDeleteChat(e, historyItem);
-      } else {
-        this.handleHistoryLink(e, historyItem);
-      }
-    });
-
-    if (this.elements.quickActionsContainer) {
-      this.elements.quickActionsContainer.addEventListener('click', (e) => this.handleQuickActionClick(e));
-    }
-
-    // Handle credit balance updates
-    document.addEventListener('balanceUpdated', (event) => {
-      const { percentage } = event.detail;
-      if (percentage === 0) {
-        this.elements.chatInput.disabled = true;
-        this.elements.submitButton.disabled = true;
-        this.elements.chatInput.placeholder = "No credits remaining - unable to ask questions";
-        this.ui.clearQuickActions();
-      } else {
-        this.elements.chatInput.disabled = false;
-        this.elements.submitButton.disabled = false;
-        this.elements.chatInput.placeholder = "Ask me anything…";
-      }
-    });
-  }
-
-  async handleDeleteChat(e, item) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const chatId = item?.getAttribute("data-chat-id");
-    if (!chatId) return;
-
-    if (confirm("Are you sure you want to delete this chat?")) {
-      try {
-        await this.api.deleteChat(chatId);
-        item.remove();
-        if (chatId === this.activeChatId) {
-          this.elements.newChatBtn.click();
+        } catch (error) {
+            console.error('❌ Chat initialization failed:', error);
+            ChatUI.showError('Failed to load chat history. Please refresh the page.');
         }
-      } catch (err) {
-        console.error("[ChatApp] Failed to delete chat:", err);
-      }
     }
-  }
 
-  handleHistoryLink(e, item) {
-    e.preventDefault();
-    const chatId = item?.getAttribute("data-chat-id");
+    // ✅ CHAT: Enhanced chat selection with message display
+    async selectChat(chatId, preloadedMessages = null) {
+        try {
+            console.log(`[ChatManager] Selecting chat ${chatId}...`);
 
-    if (chatId && chatId !== this.activeChatId) {
-      console.log("[ChatApp] Navigating to chat:", chatId);
-      window.history.pushState({ chatId }, "", `/chat?id=${chatId}`);
-      this.loadMessages(chatId);
+            // Update current chat ID
+            this.currentChatId = chatId;
+
+            // Update UI to show selected chat
+            ChatUI.setActiveChat(chatId);
+
+            // Load messages (use preloaded if available)
+            let messages;
+            if (preloadedMessages) {
+                messages = preloadedMessages;
+                console.log(`Using preloaded ${messages.length} messages`);
+            } else {
+                console.log('Loading messages for selected chat...');
+                messages = await ChatAPI.getChatMessages(chatId);
+            }
+
+            // Display messages immediately
+            ChatUI.renderMessages(messages);
+
+            // Enable message input
+            ChatUI.enableMessageInput();
+
+            console.log(`✅ Chat ${chatId} selected with ${messages.length} messages`);
+
+        } catch (error) {
+            console.error(`❌ Failed to select chat ${chatId}:`, error);
+            ChatUI.showError('Failed to load chat messages');
+        }
     }
-  }
+
+    // ✅ STREAMING: Enhanced message sending with real-time rendering
+    async sendMessage(content) {
+        if (!this.currentChatId || !content.trim()) {
+            console.warn('Cannot send message: no chat selected or empty content');
+            return;
+        }
+
+        if (this.isStreaming) {
+            console.warn('Already streaming, ignoring new message');
+            return;
+        }
+
+        try {
+            console.log(`[ChatManager] Sending message to chat ${this.currentChatId}: "${content}"`);
+
+            this.isStreaming = true;
+            this.streamingContent = '';
+
+            // Add user message to UI immediately
+            ChatUI.addUserMessage(content);
+
+            // Disable input during streaming
+            ChatUI.disableMessageInput('AI is thinking...');
+
+            // Show AI response placeholder
+            const messageId = ChatUI.showAIResponsePlaceholder();
+
+            // ✅ REAL-TIME STREAMING: Start streaming with enhanced callbacks
+            this.currentStream = await ChatAPI.streamChatResponse(
+                this.currentChatId,
+                content,
+                // onDelta - real-time markdown rendering
+                (delta) => {
+                    this.streamingContent += delta;
+                    ChatUI.updateAIResponse(messageId, this.streamingContent);
+                },
+                // onSources - medical references
+                (sources) => {
+                    ChatUI.displaySources(sources);
+                },
+                // onComplete - streaming finished
+                () => {
+                    console.log('✅ Streaming completed');
+                    this.isStreaming = false;
+                    ChatUI.enableMessageInput();
+                    ChatUI.finalizeAIResponse(messageId, this.streamingContent);
+                    this.updateUserBalance(); // Refresh balance after message
+                    this.streamingContent = '';
+                },
+                // onError - handle streaming errors
+                (error) => {
+                    console.error('❌ Streaming error:', error);
+                    this.isStreaming = false;
+                    ChatUI.enableMessageInput();
+                    ChatUI.showError('Failed to get AI response. Please try again.');
+                    this.streamingContent = '';
+                }
+            );
+
+        } catch (error) {
+            console.error('❌ Failed to send message:', error);
+            this.isStreaming = false;
+            ChatUI.enableMessageInput();
+            ChatUI.showError('Failed to send message');
+        }
+    }
+
+    // ✅ PAGINATION: Load more chats
+    async loadMoreChats() {
+        if (!this.currentPagination || !this.currentPagination.has_more) {
+            console.log('No more chats to load');
+            return;
+        }
+
+        try {
+            const nextPage = this.currentPagination.page + 1;
+            console.log(`Loading more chats: page ${nextPage}`);
+
+            const data = await ChatAPI.getChats(nextPage, this.currentPagination.limit);
+            const newChats = data.chats || [];
+            const newPagination = data.pagination || {};
+
+            if (newChats.length > 0) {
+                // Get current chats
+                const currentChats = Array.from(document.querySelectorAll('.chat-item')).map(el => ({
+                    id: el.dataset.chatId,
+                    element: el
+                }));
+
+                // Combine and re-render
+                const allChats = [...this.getCurrentChats(), ...newChats];
+                ChatUI.renderChatList(allChats, newPagination);
+                this.currentPagination = newPagination;
+
+                console.log(`✅ Loaded ${newChats.length} more chats`);
+            }
+
+        } catch (error) {
+            console.error('Failed to load more chats:', error);
+            ChatUI.showError('Failed to load more chats');
+        }
+    }
+
+    // ✅ CHAT: Create new chat
+    async createNewChat() {
+        try {
+            const title = prompt('Enter chat title:', 'New Medical Consultation');
+            if (!title || title.trim() === '') {
+                return;
+            }
+
+            console.log(`Creating new chat: "${title}"`);
+            ChatUI.showLoadingState('Creating new chat...');
+
+            const newChat = await ChatAPI.createChat(title.trim());
+
+            // Refresh chat list
+            await this.refreshChatList();
+
+            // Select the new chat
+            await this.selectChat(newChat.id);
+
+            console.log('✅ New chat created and selected');
+
+        } catch (error) {
+            console.error('❌ Failed to create new chat:', error);
+            ChatUI.showError('Failed to create new chat');
+        }
+    }
+
+    // ✅ CHAT: Delete chat
+    async deleteChat(chatId) {
+        if (!confirm('Are you sure you want to delete this medical consultation?')) {
+            return;
+        }
+
+        try {
+            console.log(`Deleting chat ${chatId}...`);
+
+            await ChatAPI.deleteChat(chatId);
+
+            // If deleted chat was selected, clear selection
+            if (this.currentChatId === chatId) {
+                this.currentChatId = null;
+                ChatUI.showEmptyState();
+            }
+
+            // Refresh chat list
+            await this.refreshChatList();
+
+            console.log('✅ Chat deleted successfully');
+
+        } catch (error) {
+            console.error(`❌ Failed to delete chat ${chatId}:`, error);
+            ChatUI.showError('Failed to delete chat');
+        }
+    }
+
+    // ✅ REFRESH: Refresh chat list with pagination
+    async refreshChatList() {
+        try {
+            console.log('Refreshing chat list...');
+            const data = await ChatAPI.getChats();
+            const chats = data.chats || [];
+            const pagination = data.pagination || {};
+
+            ChatUI.renderChatList(chats, pagination);
+            this.currentPagination = pagination;
+
+            // If no current chat selected and chats available, select first
+            if (!this.currentChatId && chats.length > 0) {
+                await this.selectChat(chats[0].id);
+            }
+
+        } catch (error) {
+            console.error('❌ Failed to refresh chat list:', error);
+        }
+    }
+
+    // ✅ BALANCE: Update user balance display
+    async updateUserBalance() {
+        try {
+            const balance = await ChatAPI.getUserBalance();
+            ChatUI.updateBalance(balance);
+        } catch (error) {
+            console.warn('Failed to update balance:', error);
+        }
+    }
+
+    // ✅ EVENTS: Set up event listeners
+    setupEventListeners() {
+        console.log('[ChatManager] Setting up event listeners...');
+
+        // Message form submission
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+
+        if (messageForm && messageInput) {
+            messageForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const content = messageInput.value.trim();
+                if (content && !this.isStreaming) {
+                    this.sendMessage(content);
+                    messageInput.value = '';
+                }
+            });
+
+            // Auto-resize textarea
+            messageInput.addEventListener('input', () => {
+                messageInput.style.height = 'auto';
+                messageInput.style.height = messageInput.scrollHeight + 'px';
+            });
+
+            // Enter key handling
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    messageForm.dispatchEvent(new Event('submit'));
+                }
+            });
+        }
+
+        // New chat button
+        const newChatBtn = document.getElementById('new-chat-btn');
+        if (newChatBtn) {
+            newChatBtn.addEventListener('click', () => this.createNewChat());
+        }
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.isInitialized) {
+                console.log('[ChatManager] Page became visible, refreshing data...');
+                this.updateUserBalance();
+            }
+        });
+
+        console.log('✅ Event listeners set up successfully');
+    }
+
+    // ✅ UTILITY: Get current chats from DOM
+    getCurrentChats() {
+        const chatElements = document.querySelectorAll('.chat-item');
+        return Array.from(chatElements).map(el => {
+            const titleEl = el.querySelector('.chat-title');
+            const timeEl = el.querySelector('.chat-time');
+            return {
+                id: parseInt(el.dataset.chatId),
+                title: titleEl ? titleEl.textContent : 'Unknown',
+                updated_at: timeEl ? timeEl.textContent : new Date().toISOString()
+            };
+        });
+    }
+
+    // ✅ CLEANUP: Cleanup method
+    destroy() {
+        console.log('[ChatManager] Cleaning up...');
+
+        if (this.currentStream) {
+            this.currentStream.close();
+        }
+
+        this.isInitialized = false;
+        this.currentChatId = null;
+        this.isStreaming = false;
+    }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const app = new ChatApp();
-  if (app.elements.chatForm) {
-    app.init();
-  }
+// ✅ Initialize on page load
+const chatManager = new ChatManager();
+window.chatManager = chatManager;
+
+// Auto-initialization
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Chat page loaded, starting initialization...');
+    try {
+        await chatManager.initialize();
+    } catch (error) {
+        console.error('❌ Failed to initialize chat on page load:', error);
+        ChatUI.showError('Failed to initialize chat. Please refresh the page.');
+    }
 });
+
+// Handle page reload/refresh
+window.addEventListener('load', async function() {
+    if (!chatManager.isInitialized) {
+        console.log('🔄 Window loaded, ensuring chat initialization...');
+        await chatManager.initialize();
+    }
+});
+
+// Handle page focus
+window.addEventListener('focus', function() {
+    if (chatManager.isInitialized && !chatManager.isStreaming) {
+        console.log('[ChatManager] Window focused, refreshing data...');
+        chatManager.updateUserBalance();
+    }
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    chatManager.destroy();
+});
+
+// ✅ Global functions for UI interactions
+window.selectChat = (chatId) => chatManager.selectChat(chatId);
+window.deleteChat = (chatId) => chatManager.deleteChat(chatId);
+window.createNewChat = () => chatManager.createNewChat();
+
+console.log('✅ Chat Manager loaded and ready with real-time streaming support');

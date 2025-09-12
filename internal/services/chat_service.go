@@ -1,3 +1,4 @@
+// G:\go_internist\internal\services\chat_service.go
 package services
 
 import (
@@ -92,10 +93,6 @@ func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string)
     return createdChat, nil
 }
 
-func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.Chat, error) {
-    return s.chatRepo.FindByUserID(ctx, userID)
-}
-
 func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) ([]domain.Message, error) {
     chatRecord, err := s.chatRepo.FindByID(ctx, chatID)
     if err != nil || chatRecord.UserID != userID {
@@ -139,4 +136,16 @@ func (s *ChatService) AddChatMessage(ctx context.Context, userID, chatID uint, c
 
 func (s *ChatService) ExtractSourceTitles(matches []*pinecone.ScoredVector) []string {
     return s.sourceExtractor.ExtractSources(matches)
+}
+
+// Add this new method to ChatService
+func (s *ChatService) GetUserChatsWithPagination(ctx context.Context, userID uint, limit, offset int) ([]domain.Chat, int64, error) {
+    return s.chatRepo.FindByUserIDWithPagination(ctx, userID, limit, offset)
+}
+
+// ✅ OPTIONAL: Update existing method to use pagination internally
+func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.Chat, error) {
+    // Use pagination with high limit for backward compatibility
+    chats, _, err := s.chatRepo.FindByUserIDWithPagination(ctx, userID, 100, 0)
+    return chats, err
 }
