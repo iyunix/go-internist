@@ -1,493 +1,107 @@
 {{define "styles"}}
-    <!-- Base styles -->
-    <link rel="stylesheet" href="/static/css/base/reset.css">
-    <link rel="stylesheet" href="/static/css/base/variables.css">
-    <link rel="stylesheet" href="/static/css/base/typography.css">
-    
-    <!-- Layout styles -->
-    <link rel="stylesheet" href="/static/css/layout/grid.css">
-    <link rel="stylesheet" href="/static/css/layout/responsive.css">
-    
-    <!-- Component styles -->
-    <link rel="stylesheet" href="/static/css/components/messages.css">
-    <link rel="stylesheet" href="/static/css/components/sidebar.css">
-    <link rel="stylesheet" href="/static/css/components/skeleton.css">
-    <link rel="stylesheet" href="/static/css/components/input-form.css">
-    <link rel="stylesheet" href="/static/css/components/footnotes.css">
-    
-    <!-- Main chat styles -->
-    <link rel="stylesheet" href="/static/css/chat.css">
-    
-    <!-- Animations -->
-    <link rel="stylesheet" href="/static/css/animations/keyframes.css">
-    
-    <!-- Additional chat-specific styles -->
-    <style>
-        /* ✅ Real-time markdown rendering styles */
-        .medical-term {
-            background: rgba(59, 130, 246, 0.1);
-            color: #1d4ed8;
-            padding: 1px 3px;
-            border-radius: 3px;
-            font-weight: 500;
-        }
-        
-        .drug-name {
-            background: rgba(16, 185, 129, 0.1);
-            color: #047857;
-            padding: 1px 3px;
-            border-radius: 3px;
-            font-weight: 500;
-        }
-        
-        .medical-code {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            position: relative;
-        }
-        
-        .copy-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: #374151;
-            color: white;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-        
-        .copy-btn:hover {
-            opacity: 1;
-        }
-        
-        .medical-sources {
-            margin: 16px 0;
-            padding: 16px;
-            background: #f8fafc;
-            border-left: 4px solid #3b82f6;
-            border-radius: 6px;
-        }
-        
-        .sources-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 12px;
-            font-weight: 600;
-            color: #1e40af;
-        }
-        
-        .source-item {
-            display: flex;
-            gap: 8px;
-            margin: 8px 0;
-            padding: 8px;
-            background: white;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        
-        .source-number {
-            background: #3b82f6;
-            color: white;
-            padding: 2px 6px;
-            border-radius: 50%;
-            font-size: 12px;
-            font-weight: bold;
-            min-width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        /* ✅ Loading and empty states */
-        .loading-state, .empty-state, .error-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 48px 24px;
-            text-align: center;
-            min-height: 400px;
-        }
-        
-        .loading-spinner {
-            margin-bottom: 16px;
-        }
-        
-        .spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid #e5e7eb;
-            border-top: 3px solid #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .empty-icon, .error-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-        }
-        
-        .empty-title, .error-title {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #374151;
-        }
-        
-        .empty-subtitle, .error-message {
-            color: #6b7280;
-            margin-bottom: 24px;
-        }
-        
-        /* ✅ Chat pagination */
-        .chat-list-pagination {
-            padding: 16px;
-            text-align: center;
-            border-top: 1px solid #e5e7eb;
-        }
-        
-        .pagination-info {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 12px;
-        }
-        
-        /* ✅ Message streaming styles */
-        .message.streaming .typing-indicator {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            padding: 8px 0;
-        }
-        
-        .typing-indicator span {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #9ca3af;
-            animation: typing 1.4s ease-in-out infinite both;
-        }
-        
-        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0s; }
-        
-        @keyframes typing {
-            0%, 80%, 100% {
-                transform: scale(0);
-                opacity: 0.5;
-            }
-            40% {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-    </style>
-{{end}}
-
-{{define "scripts"}}
-    <!-- ✅ CRITICAL: Load dependencies first -->
-    <script src="/static/js/vendor/marked.umd.js"></script>
-    <script src="/static/js/vendor/purify.min.js"></script>
-    
-    <!-- ✅ Load utility scripts -->
-    <script src="/static/js/logger.js"></script>
-    <script src="/static/js/utils.js"></script>
-    
-    <!-- ✅ Load markdown renderer (FIXED VERSION) -->
-    <script src="/static/js/markdown_renderer.js"></script>
-    
-    <!-- ✅ Load chat system modules -->
-    <script src="/static/js/chat/chat-api.js"></script>
-    <script src="/static/js/chat/chat-ui.js"></script>
-    <script src="/static/js/chat/chat-stream.js"></script>
-    
-    <!-- ✅ Load main chat controller -->
-    <script src="/static/js/chat/chat.js"></script>
-    
-    <!-- ✅ Load credit manager -->
-    <script src="/static/js/credit-manager.js"></script>
+<style>
+    body { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; font-family: sans-serif; }
+    main { max-width: 800px; width: 95%; height: 95vh; display: flex; flex-direction: column; background-color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 12px; }
+    #chat-window { flex-grow: 1; overflow-y: auto; padding: 1.5rem; }
+    .message { padding: 12px 18px; margin-bottom: 12px; border-radius: 18px; max-width: 85%; line-height: 1.6; word-wrap: break-word; }
+    .user-message { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; }
+    .ai-message { background-color: #e9ecef; color: #343a40; align-self: flex-start; margin-right: auto; }
+    .ai-message table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    .ai-message th, .ai-message td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+    .ai-message th { background-color: #f8f9fa; font-weight: 600; }
+    #chat-form { display: flex; padding: 1rem; border-top: 1px solid #dee2e6; }
+</style>
 {{end}}
 
 {{define "content"}}
-<div class="chat-layout">
-    <!-- ✅ SIDEBAR: Chat history and controls -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <h1 class="sidebar-title">🤖 Internist AI</h1>
-            <button id="new-chat-btn" class="new-chat-btn">+ New Chat</button>
-            <a href="/logout" class="logout-btn">Logout</a>
-        </div>
-        
-        <!-- ✅ CREDITS: Progress bar section -->
-        <div class="sidebar-credit">
-            <div class="credit-header">
-                <span class="credit-title">Credits</span>
-                <span class="credit-numbers">
-                    <span id="current-balance">2500</span>/<span id="total-balance">2500</span>
-                </span>
-            </div>
-            
-            <div class="progress-container">
-                <div class="progress-bar" id="credit-progress-bar">
-                    <div class="progress-fill" id="credit-progress-fill"></div>
-                    <span class="progress-text" id="credit-percentage">100%</span>
-                </div>
-            </div>
-            
-            <div class="credit-status" id="credit-status">
-                <span class="status-text good">Good standing</span>
-            </div>
-        </div>
-        
-        <!-- ✅ CHAT LIST: History navigation -->
-        <nav class="chat-history">
-            <h3 class="history-title">Recent Consultations</h3>
-            <div id="chat-list" class="chat-list">
-                <!-- ✅ Initial loading state -->
-                <div class="loading-state">
-                    <div class="loading-spinner">
-                        <div class="spinner"></div>
-                    </div>
-                    <div class="loading-text">Loading consultations...</div>
-                </div>
-            </div>
-        </nav>
-    </aside>
+    <h2 style="text-align: center; padding: 1rem; margin: 0; border-bottom: 1px solid #dee2e6;">Internist AI</h2>
+    <div id="chat-window"></div>
+    <form id="chat-form">
+        <input type="text" id="message-input" placeholder="Ask your medical question..." autocomplete="off" style="flex-grow: 1; padding: 12px; border: 1px solid #ccc; border-radius: 20px;">
+        <button type="submit" style="padding: 12px 20px; margin-left: 10px; cursor: pointer;">Send</button>
+    </form>
+{{end}}
 
-    <!-- ✅ MAIN CHAT: Messages and input -->
-    <main class="chat-main">
-        <div class="chat-content-wrapper">
-            <!-- ✅ MESSAGES: Container for chat messages -->
-            <div id="messages-container" class="messages-container">
-                <!-- ✅ Initial loading state -->
-                <div class="loading-state">
-                    <div class="loading-spinner">
-                        <div class="spinner"></div>
-                    </div>
-                    <div class="loading-text">Loading chat history...</div>
-                </div>
-            </div>
+{{define "scripts"}}
+<!-- Include Markdown and HTML sanitizer libraries -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 
-            <!-- ✅ INPUT: Message form -->
-            <div class="input-form-container">
-                <form id="message-form" class="input-form">
-                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                    <textarea 
-                        id="message-input" 
-                        placeholder="Ask me anything about your health..." 
-                        rows="1"
-                        disabled></textarea>
-                    <button type="submit" id="send-btn" disabled aria-label="Send message">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
-                        </svg>
-                    </button>
-                </form>
-                <small class="disclaimer">
-                    🏥 Medical AI may display inaccurate information. Always consult healthcare professionals for serious concerns.
-                </small>
-            </div>
-        </div>
-    </main>
-</div>
-
-<!-- ✅ INITIALIZATION: Page setup scripts -->
 <script>
-console.log('🚀 Internist AI Chat - Page Loading...');
+    const chatWindow = document.getElementById('chat-window');
+    const chatForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+    const CHAT_ID = "1";
 
-// ✅ Remove any skeleton loading states
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('✅ DOM loaded, removing skeleton states...');
-    
-    // Hide skeleton elements
-    const skeletons = document.querySelectorAll('.skeleton-container, .skeleton, [class*="skeleton"]');
-    skeletons.forEach(skeleton => {
-        skeleton.style.display = 'none';
-    });
-    
-    // Remove skeleton classes
-    const elementsWithSkeletonClass = document.querySelectorAll('[class*="skeleton"]');
-    elementsWithSkeletonClass.forEach(element => {
-        element.classList.forEach(className => {
-            if (className.includes('skeleton') && className !== 'skeleton-container') {
-                element.classList.remove(className);
-            }
-        });
-    });
-    
-    console.log('✅ Skeleton cleanup complete');
-});
-
-// ✅ DIAGNOSTIC: System check
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔍 Chat System Diagnostic Starting...');
-    
-    // Check required elements
-    const elements = {
-        messagesContainer: document.getElementById('messages-container'),
-        chatList: document.getElementById('chat-list'),
-        messageInput: document.getElementById('message-input'),
-        messageForm: document.getElementById('message-form'),
-        newChatBtn: document.getElementById('new-chat-btn'),
-        sendBtn: document.getElementById('send-btn'),
-        currentBalance: document.getElementById('current-balance')
-    };
-    
-    console.log('🔍 Element Check:', Object.fromEntries(
-        Object.entries(elements).map(([key, el]) => [key, !!el])
-    ));
-    
-    // Check required scripts
-    const scripts = {
-        marked: !!window.marked,
-        DOMPurify: !!window.DOMPurify,
-        MarkdownRenderer: !!window.MarkdownRenderer,
-        ChatAPI: !!window.ChatAPI,
-        ChatUI: !!window.ChatUI,
-        chatManager: !!window.chatManager
-    };
-    
-    console.log('🔍 Script Check:', scripts);
-    
-    // Test API connectivity
-    setTimeout(async () => {
-        try {
-            console.log('🔍 Testing API connectivity...');
-            
-            // Test balance endpoint
-            const balanceResponse = await fetch('/api/user/balance');
-            const balanceData = await balanceResponse.json();
-            console.log('✅ Balance API:', balanceData);
-            
-            // Test chats endpoint
-            const chatsResponse = await fetch('/api/chats');
-            const chatsData = await chatsResponse.json();
-            console.log('✅ Chats API:', chatsData);
-            
-            console.log('🎉 API connectivity test completed successfully');
-            
-        } catch (error) {
-            console.error('❌ API connectivity test failed:', error);
-        }
-    }, 2000);
-    
-    // Initialize error handling
-    window.addEventListener('error', function(e) {
-        console.error('🚨 Global Error:', {
-            message: e.message,
-            filename: e.filename,
-            lineno: e.lineno,
-            colno: e.colno,
-            error: e.error
-        });
-    });
-    
-    window.addEventListener('unhandledrejection', function(e) {
-        console.error('🚨 Unhandled Promise Rejection:', e.reason);
-    });
-});
-
-// ✅ PERFORMANCE: Monitor chat initialization
-let initStartTime = Date.now();
-
-window.addEventListener('load', function() {
-    const loadTime = Date.now() - initStartTime;
-    console.log(`⚡ Page load completed in ${loadTime}ms`);
-    
-    // Check if chat manager initialized
-    setTimeout(() => {
-        if (window.chatManager && window.chatManager.isInitialized) {
-            const totalTime = Date.now() - initStartTime;
-            console.log(`🎉 Chat system fully initialized in ${totalTime}ms`);
+    function addMessage(content, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}-message`;
+        if (sender === 'ai') {
+            const unsafeHtml = marked.parse(content);
+            messageDiv.innerHTML = DOMPurify.sanitize(unsafeHtml);
         } else {
-            console.warn('⚠️ Chat system initialization delayed or failed');
+            messageDiv.textContent = content;
         }
-    }, 5000);
-});
-
-// ✅ ACCESSIBILITY: Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    // Ctrl/Cmd + Enter to send message
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        const form = document.getElementById('message-form');
-        if (form) {
-            e.preventDefault();
-            form.dispatchEvent(new Event('submit'));
-        }
+        chatWindow.appendChild(messageDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        return messageDiv;
     }
-    
-    // Escape to clear input
-    if (e.key === 'Escape') {
-        const input = document.getElementById('message-input');
-        if (input && input === document.activeElement) {
-            input.value = '';
-            input.blur();
-        }
-    }
-});
 
-// ✅ MEMORY: Cleanup on page unload
-window.addEventListener('beforeunload', function() {
-    console.log('🧹 Cleaning up chat system...');
-    if (window.chatManager && typeof window.chatManager.destroy === 'function') {
-        window.chatManager.destroy();
-    }
-});
+    chatForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+        const message = messageInput.value.trim();
+        if (!message) return;
 
-// ✅ FOCUS: Handle page visibility
-document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && window.chatManager && window.chatManager.isInitialized) {
-        console.log('👁️ Page visible, refreshing data...');
-        if (typeof window.chatManager.updateUserBalance === 'function') {
-            window.chatManager.updateUserBalance();
-        }
-    }
-});
+        addMessage(message, 'user');
+        messageInput.value = '';
 
-console.log('✅ Chat page scripts loaded and ready');
-</script>
+        const aiMessageDiv = addMessage("Thinking...", 'ai');
+        let fullResponse = "";
 
-<!-- ✅ MOBILE: Responsive handling -->
-<script>
-// Handle mobile-specific interactions
-if (window.innerWidth <= 768) {
-    console.log('📱 Mobile layout detected');
-    
-    // Auto-hide sidebar on mobile after chat selection
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.chat-item')) {
-            const sidebar = document.querySelector('.sidebar');
-            if (sidebar) {
-                sidebar.classList.add('mobile-hidden');
+        const eventSource = new EventSource(`/api/chats/${CHAT_ID}/stream?q=${encodeURIComponent(message)}`);
+        
+        aiMessageDiv.textContent = "";
+
+        // --- CORRECTED ONMESSAGE HANDLER ---
+        eventSource.onmessage = function(event) {
+            try {
+                // 1. Parse the incoming data as a JSON object.
+                const data = JSON.parse(event.data);
+
+                // 2. Check if the "content" field exists.
+                if (data.content) {
+                    // 3. Append the text content to our fullResponse accumulator.
+                    fullResponse += data.content;
+                    
+                    // 4. Render the entire accumulated response as Markdown.
+                    const unsafeHtml = marked.parse(fullResponse);
+                    aiMessageDiv.innerHTML = DOMPurify.sanitize(unsafeHtml);
+                    
+                    // 5. Keep the view scrolled to the bottom.
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+                }
+            } catch (e) {
+                console.error("Failed to parse SSE data:", event.data, e);
             }
-        }
-    });
-    
-    // Show sidebar on new chat button
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('#new-chat-btn')) {
-            const sidebar = document.querySelector('.sidebar');
-            if (sidebar) {
-                sidebar.classList.remove('mobile-hidden');
-            }
-        }
-    });
-}
-</script>
+        };
 
+        // All other event handlers are correct and remain the same.
+        eventSource.addEventListener('metadata', function(event) {
+            console.log("Received metadata:", JSON.parse(event.data));
+        });
+
+        eventSource.addEventListener('complete', function(event) {
+            console.log("Consultation complete:", JSON.parse(event.data));
+        });
+
+        eventSource.addEventListener('done', function() {
+            eventSource.close();
+            console.log("Stream closed by server 'done' event.");
+        });
+
+        eventSource.onerror = function(err) {
+            eventSource.close();
+        };
+    });
+</script>
 {{end}}

@@ -43,7 +43,7 @@ func loadTemplateCache() {
 // renderTemplate uses individual template cache and injects CSRF/security headers
 func renderTemplate(w http.ResponseWriter, tmpl string, data map[string]interface{}) {
 	templateCacheOnce.Do(loadTemplateCache)
-	addSecurityHeaders(w)
+	// addSecurityHeaders(w)
 
 	if data == nil {
 		data = make(map[string]interface{})
@@ -64,12 +64,12 @@ func renderTemplate(w http.ResponseWriter, tmpl string, data map[string]interfac
 	}
 }
 
-func addSecurityHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Security-Policy", "default-src 'self'")
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-}
+// func addSecurityHeaders(w http.ResponseWriter) {
+// 	w.Header().Set("Content-Security-Policy", "default-src 'self'")
+// 	w.Header().Set("X-Frame-Options", "DENY")
+// 	w.Header().Set("X-Content-Type-Options", "nosniff")
+// 	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+// }
 
 // Dummy CSRF token generator
 func generateCSRFToken() string {

@@ -149,3 +149,31 @@ func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.C
     chats, _, err := s.chatRepo.FindByUserIDWithPagination(ctx, userID, 100, 0)
     return chats, err
 }
+
+// SaveMessage saves a user message to a chat
+func (s *ChatService) SaveMessage(ctx context.Context, userID, chatID uint, content, messageType string) (*domain.Message, error) {
+    // Validate chat ownership using existing pattern
+    chatRecord, err := s.chatRepo.FindByID(ctx, chatID)
+    if err != nil || chatRecord.UserID != userID {
+        return nil, chatservice.NewUnauthorizedError(userID, chatID)
+    }
+
+    // Create message using the CORRECT struct fields
+    message := &domain.Message{
+        ChatID:      chatID,        // ✅ Correct field name
+        Content:     content,       // ✅ Correct field name  
+        MessageType: messageType,   // ✅ Correct field name
+        Archived:    false,         // ✅ Optional: explicitly set archived status
+        // Note: No UserID field - user association is through Chat relationship
+        // CreatedAt and UpdatedAt will be set automatically by GORM
+    }
+
+    // Save using your message repository
+    savedMessage, err := s.messageRepo.Create(ctx, message)
+    if err != nil {
+        return nil, chatservice.NewRAGError("save_message", "could not save message", err)
+    }
+
+    return savedMessage, nil
+}
+

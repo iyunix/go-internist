@@ -1,15 +1,35 @@
 {{define "styles"}}
-    <link rel="stylesheet" href="/static/css/main.css">
-    <link rel="stylesheet" href="/static/css/error.css">
+<style>
+    .error-container {
+        text-align: center;
+    }
+    .error-code {
+        font-size: 4rem;
+        font-weight: bold;
+        color: #dc3545;
+    }
+    .error-message {
+        font-size: 1.25rem;
+        margin-top: 0.5rem;
+    }
+    .home-link {
+        display: inline-block;
+        margin-top: 1.5rem;
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+    }
+</style>
 {{end}}
 
 {{define "content"}}
-<section class="error-page">
-    <div class="error-container">
-        <h1 class="error-title">{{.Code}}</h1>
-        <h2 class="error-message">{{.Message}}</h2>
-        <p class="error-desc">{{.Description}}</p>
-        <a href="/" class="btn btn-primary">Back to Home</a>
-    </div>
-</section>
+<div class="error-container">
+    <div class="error-code">{{.StatusCode}}</div>
+    <h2>{{.Title}}</h2>
+    <p class="error-message">{{.Message}}</p>
+    <a href="/" class="home-link">Go to Homepage</a>
+</div>
 {{end}}
+

@@ -1,37 +1,62 @@
-{{define "styles"}}
-    <link rel="stylesheet" href="/static/css/auth.css">
+{{define "content"}}
+    <h2>Login</h2>
+    <p>Please enter your username and password to continue.</p>
+    <form id="login-form">
+        <input type="text" id="username" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box;">
+        <input type="password" id="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box;">
+        <button type="submit" style="width: 100%; padding: 10px; cursor: pointer;">Login</button>
+        
+        <!-- Display error messages passed from the backend -->
+        {{if .Error}}
+            <p id="error-message" style="color: red; margin-top: 10px;">{{.Error}}</p>
+        {{else}}
+            <p id="error-message" style="color: red; margin-top: 10px;"></p>
+        {{end}}
+    </form>
+    <p style="text-align: center; margin-top: 1rem;">
+        Don't have an account? <a href="/register">Register here</a>.
+    </p>
 {{end}}
 
-{{define "content"}}
-<div class="auth-container">
-    <div class="auth-form">
-        <div class="auth-header">
-            <h1>Log in</h1>
-        </div>
+{{define "scripts"}}
+<script>
+    document.getElementById('login-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
 
-        {{if .Error}}
-        <p class="form-error">{{.Error}}</p>
-        {{end}}
+        // Your backend expects form data, not JSON.
+        // URLSearchParams creates the correct format (x-www-form-urlencoded).
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
 
-        <form action="/login" method="POST">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input id="username" name="username" type="text" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input id="password" name="password" type="password" required>
-            </div>
-            
-            <button type="submit" class="btn btn-primary">Log In</button>
-        </form>
+        try {
+            const response = await fetch('/login', {
+                method: 'POST',
+                body: formData
+            });
 
-        <div class="auth-footer">
-            <p>Don't have an account? <a href="/register">Sign up</a></p>
-        </div>
-    </div>
-</div>
+            // Your backend correctly redirects to "/chat" on success.
+            // The fetch API follows this redirect, so the final response URL will be the chat page.
+            if (response.ok && response.url.includes("/chat")) {
+                // Manually navigate the browser to the new page.
+                window.location.href = response.url;
+            } else {
+                // On failure, your backend re-renders the login page with an error message.
+                // This code replaces the current page's content with the new HTML from the server.
+                const errorPageHtml = await response.text();
+                document.open();
+                document.write(errorPageHtml);
+                document.close();
+            }
+        } catch (error) {
+            // This handles network failures, not login errors.
+            const errorMessage = document.getElementById('error-message');
+            if (errorMessage) {
+                errorMessage.textContent = 'A network error occurred. Please try again.';
+            }
+        }
+    });
+</script>
 {{end}}
