@@ -1,0 +1,118 @@
+/* Replace entire skeleton.css content with: */
+.skeleton-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.skeleton-avatar {
+    width: 32px;
+    height: 32px;
+        background: var(--info);
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+.skeleton-content {
+    flex: 1;
+    max-width: 70%;
+}
+
+.skeleton-line {
+    height: 16px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    animation: loading 1.5s infinite;
+}
+
+.skeleton-line-long { width: 85%; }
+.skeleton-line-medium { width: 65%; }
+.skeleton-line-short { width: 45%; }
+
+.skeleton-container {
+    padding: 16px;
+}
+
+.skeleton-loader {
+    padding: 16px;
+}
+
+.skeleton-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.skeleton-status-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.skeleton-status-icon.searching { background: #3b82f6; }
+.skeleton-status-icon.processing { background: #f59e0b; }
+.skeleton-status-icon.thinking { background: #10b981; }
+
+.skeleton-status-text {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.skeleton-lines {
+    background: var(--info);
+    display: flex;
+    background: var(--warning);
+    flex-direction: column;
+    background: var(--success);
+    gap: 8px;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    color: var(--text-muted);
+    100% { background-position: -200% 0; }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #f1f3f4;
+    border-radius: 18px;
+    max-width: fit-content;
+}
+
+.typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #9ca3af;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+    0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
+}

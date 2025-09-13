@@ -1,29 +1,54 @@
 {{define "styles"}}
-<style>
-    .welcome-container {
-        text-align: center;
-    }
-    .button {
-        display: inline-block;
-        padding: 12px 24px;
-        margin-top: 1rem;
-        background-color: #007bff;
-        color: white;
-        text-decoration: none;
-        border-radius: 5px;
-        font-weight: bold;
-        transition: background-color 0.2s;
-    }
-    .button:hover {
-        background-color: #0056b3;
-    }
-</style>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/landing.css">
 {{end}}
 
 {{define "content"}}
-<div class="welcome-container">
-    <h2>Welcome to Internist AI</h2>
-    <p>Your personal medical chat assistant.</p>
-    <a href="/login" class="button">Login to Get Started</a>
-</div>
+<section class="landing-hero">
+    <div class="landing-container">
+        <h1 class="landing-title">Internist</h1>
+        <h2 class="landing-title">Evidence-based medical assistant</h2>
+    <p class="landing-poem">Guided by <span class="poem-blue">knowledge</span><br>Powered by <span class="poem-blue">intelligence</span></p>
+        <a href="/login" class="landing-btn btn btn-primary">Get Started</a>
+    </div>
+</section>
+<section class="landing-features">
+    <div class="feature">
+        <h2>Medical Expertise</h2>
+        <p>Accurate, reliable answers for clinicians and patients.</p>
+    </div>
+    <div class="feature">
+        <h2>Secure &amp; Private</h2>
+        <p>Your data is protected with industry best practices.</p>
+    </div>
+    <div class="feature">
+        <h2>Conversational AI</h2>
+        <p>Natural, context-aware chat for medical queries.</p>
+    </div>
+</section>
+<section class="landing-cta">
+    <div class="cta-container">
+        <h2>Ready to Get Started?</h2>
+        <p>Join hundreds of medical professionals who are streamlining their workflow and accessing information faster than ever before.</p>
+        <a href="/register" class="btn btn-primary">Sign Up for Free</a>
+    </div>
+</section>
+
+<section class="landing-contact">
+    <div class="contact-container">
+        <h3>Contact Us</h3>
+        <div class="contact-icons">
+            <a href="https://t.me/internist_support" target="_blank" title="Telegram">
+                <img src="/static/img/telegram.svg" alt="Telegram" class="contact-icon" /> @internist_support
+            </a>
+            <a href="https://www.instagram.com/askinternist" target="_blank" title="Instagram">
+                <img src="/static/img/instagram.svg" alt="Instagram" class="contact-icon" /> askinternist
+            </a>
+            <a href="https://wa.me/989935212877" target="_blank" title="WhatsApp">
+                <img src="/static/img/whatsapp.svg" alt="WhatsApp" class="contact-icon" /> 09935212877
+            </a>
+        </div>
+    </div>
+</section>
 {{end}}
+

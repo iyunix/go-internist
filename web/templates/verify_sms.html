@@ -1,41 +1,32 @@
-{{define "content"}}
-    <h2>Verify Your Phone</h2>
-    <p>We've sent a verification code to your phone. Please enter it below.</p>
-    <form id="verify-form">
-        <input type="text" id="code" name="code" placeholder="Enter 6-digit code" required style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; text-align: center; letter-spacing: 0.5em;">
-        <button type="submit" style="width: 100%; padding: 10px; cursor: pointer;">Verify</button>
-        <p id="error-message" style="color: red;"></p>
-    </form>
-    <p style="text-align: center; margin-top: 1rem;">
-        Didn't receive a code? <a href="/resend-sms">Resend it</a>.
-    </p>
+{{template "layout.html" .}}
+
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/auth.css">
+    <link rel="stylesheet" href="/static/css/verify_sms.css">
 {{end}}
 
-{{define "scripts"}}
-<script>
-    document.getElementById('verify-form').addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const code = document.getElementById('code').value;
-        const errorMessage = document.getElementById('error-message');
-        errorMessage.textContent = '';
-
-        try {
-            const response = await fetch('/verify-sms', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: code })
-            });
-
-            if (response.ok) {
-                // On successful verification, redirect to the chat page
-                window.location.href = '/chat';
-            } else {
-                const data = await response.json();
-                errorMessage.textContent = data.error || 'Verification failed. Please check the code and try again.';
-            }
-        } catch (error) {
-            errorMessage.textContent = 'A network error occurred.';
-        }
-    });
-</script>
+{{define "content"}}
+<div class="auth-container">
+    <div class="auth-form">
+        <div class="auth-header">
+            <h1>Verify Your Phone</h1>
+            <h2>Enter the code sent to your phone</h2>
+        </div>
+        {{if .Error}}
+        <p class="form-error">{{.Error}}</p>
+        {{end}}
+        <form action="/verify-sms" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="phone_number" value="{{.PhoneNumber}}">
+            <div class="form-group">
+                <label for="sms_code">Verification Code</label>
+                <input id="sms_code" name="sms_code" type="text" required maxlength="6" autocomplete="one-time-code">
+            </div>
+            <button type="submit" class="btn btn-primary">Verify</button>
+        </form>
+        <div class="auth-footer">
+            <p>Didn't receive a code? <a href="/resend-sms?phone={{.PhoneNumber}}">Resend</a></p>
+        </div>
+    </div>
+</div>
 {{end}}

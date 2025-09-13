@@ -1,0 +1,33 @@
+/* ==========================================================================
+   Dark Theme Variables
+   ========================================================================== */
+
+/* Defines the color overrides when the dark theme is active */
+html[data-theme='dark'] {
+  /* Main Theme Palette */
+  --color-bg: #0f172a;                  /* Deep slate blue */
+  --color-surface: #1e293b;            /* Lighter slate for cards/sidebar */
+  --color-primary: #3b82f6;              /* A slightly brighter blue for better contrast */
+  --color-primary-hover: #60a5fa;      /* A noticeably lighter blue for hover */
+  --color-accent: #10b981;              /* Accent color can often remain the same */
+  --color-border: #334155;              /* Slate gray for borders */
+
+  /* Text */
+  --color-text-main: #f1f5f9;           /* Off-white */
+  --color-text-secondary: #94a3b8;      /* Lighter gray */
+  --color-text-subtle: #64748b;         /* Muted gray */
+
+  /* Chat Bubbles (User bubble remains primary-colored) */
+  --ai-bubble-bg: var(--color-surface);
+  --ai-bubble-text: var(--color-text-main);
+  --ai-bubble-border: #475569;         /* A slightly lighter border for the AI bubble */
+
+  /* Code Blocks */
+  --code-bg: #0f172a;
+  --code-text: var(--color-text-secondary);
+
+  /* Box Shadow (shadows are less visible, so we can use a subtle glow or border) */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.1);
+  /* Alternatively, for a "glow" effect, you could use a light border: */
+  /* --shadow-sm: inset 0 0 0 1px var(--color-border); */
+}

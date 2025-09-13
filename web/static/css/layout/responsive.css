@@ -1,0 +1,280 @@
+/* File: web/static/css/layout/responsive.css */
+/* Responsive design for chat interface with right-side navigation */
+
+/* ==========================================================================
+   Tablet Breakpoint (768px and below)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .chat-layout {
+        flex-direction: column; /* Stack vertically on mobile */
+        height: 100vh;
+        width: 100vw;
+    }
+    
+    .sidebar {
+        position: fixed;
+        top: 0;
+        right: -100%; /* Hidden by default, slides in from right */
+        height: 100vh;
+        width: 280px;
+        z-index: 1000;
+        transition: right 0.3s ease-in-out;
+        border-left: 1px solid #e9ecef;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+        
+        /* Ensure sidebar stays on top */
+        background: #f8f9fa;
+    }
+    
+    .sidebar.open {
+        right: 0; /* Slide in from right */
+    }
+    
+    /* Mobile sidebar overlay */
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+    }
+    
+    .sidebar-overlay.active {
+        display: block;
+    }
+    
+    .chat-main {
+        width: 100%;
+        padding: 16px;
+        gap: 12px;
+    }
+    
+    .messages {
+        padding: 12px;
+        gap: 12px;
+    }
+    
+    .message-bubble {
+        max-width: 90%; /* Wider messages on mobile */
+        padding: 14px 16px;
+    }
+    
+    .input-form-container {
+        padding: 12px 0;
+    }
+    
+    .input-form {
+        padding: 10px;
+    }
+}
+
+/* ==========================================================================
+   Mobile Breakpoint (480px and below)  
+   ========================================================================== */
+
+@media (max-width: 480px) {
+    .sidebar {
+        width: 100%; /* Full width on small phones */
+    }
+    
+    .sidebar-header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 16px;
+    }
+    
+    .sidebar-title {
+        font-size: 1.25rem;
+        flex: 1;
+    }
+    
+    .new-chat-btn,
+    .logout-btn {
+        flex: 0 0 auto;
+        padding: 8px 12px;
+        font-size: 0.8125rem;
+        min-width: 80px;
+    }
+    
+    .chat-main {
+        padding: 12px;
+    }
+    
+    .messages {
+        padding: 8px;
+    }
+    
+    .message-bubble {
+        max-width: 95%;
+        padding: 12px 14px;
+        font-size: 0.95rem;
+    }
+    
+    .avatar {
+        width: 28px;
+        height: 28px;
+    }
+    
+    .input-form {
+        padding: 8px;
+        gap: 8px;
+    }
+    
+    #chatInput {
+        font-size: 16px; /* Prevent zoom on iOS */
+    }
+}
+
+/* ==========================================================================
+   Large Desktop Breakpoint (1200px and above)
+   ========================================================================== */
+
+@media (min-width: 1200px) {
+    .sidebar {
+        width: 300px; /* Wider sidebar on large screens */
+    }
+    
+    .chat-main {
+        padding: 24px;
+    }
+    
+    .messages {
+        padding: 24px;
+        max-width: 800px; /* Prevent messages from being too wide */
+        margin: 0 auto;
+    }
+    
+    .message-bubble {
+        max-width: 70%;
+    }
+}
+
+/* ==========================================================================
+   Landscape Orientation Adjustments
+   ========================================================================== */
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .sidebar {
+        padding: 16px;
+    }
+    
+    .sidebar-header {
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+    }
+    
+    .new-chat-btn,
+    .logout-btn {
+        padding: 6px 12px;
+        font-size: 0.8125rem;
+    }
+    
+    .chat-main {
+        padding: 12px;
+    }
+    
+    .messages {
+        padding: 12px;
+    }
+}
+
+/* ==========================================================================
+   Print Styles
+   ========================================================================== */
+
+@media print {
+    .sidebar {
+        display: none;
+    }
+    
+    .chat-main {
+        width: 100%;
+        padding: 0;
+    }
+    
+    .messages {
+        padding: 0;
+        background: white;
+    }
+    
+    .message-bubble {
+        background: white !important;
+        color: black !important;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+    }
+    
+    .input-form-container {
+        display: none;
+    }
+}
+
+/* ==========================================================================
+   Dark Mode Media Query (Future-ready)
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+    .sidebar-overlay {
+        background: rgba(0, 0, 0, 0.7);
+    }
+}
+
+/* ==========================================================================
+   High DPI / Retina Display Adjustments
+   ========================================================================== */
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .avatar {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+}
+
+/* ==========================================================================
+   Reduced Motion Preferences
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar {
+        transition: none;
+    }
+    
+    .sidebar-overlay {
+        transition: none;
+    }
+    
+    .message-bubble:hover {
+        transform: none;
+    }
+    
+    .new-chat-btn:hover,
+    .logout-btn:hover {
+        transform: none;
+    }
+}
+
+/* ==========================================================================
+   Touch Device Optimizations
+   ========================================================================== */
+
+@media (hover: none) and (pointer: coarse) {
+    .history-item a {
+        padding: 14px 12px; /* Larger touch targets */
+    }
+    
+    .new-chat-btn,
+    .logout-btn {
+        min-height: 44px; /* iOS recommended touch target */
+    }
+    
+    .input-form button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}

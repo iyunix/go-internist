@@ -1,0 +1,16 @@
+/* File: web/static/css/chat.css */
+/* This file loads all styles needed ONLY for the chat page. */
+
+/* Layout */
+@import url('./layout/grid.css');
+@import url('./layout/responsive.css');
+
+/* Components */
+@import url('./components/sidebar.css');
+@import url('./components/messages.css');
+@import url('./components/input-form.css');
+@import url('./components/skeleton.css');
+@import url('./components/footnotes.css');
+
+/* Animations */
+@import url('./animations/keyframes.css');

@@ -1,107 +1,98 @@
 {{define "styles"}}
-<style>
-    body { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; font-family: sans-serif; }
-    main { max-width: 800px; width: 95%; height: 95vh; display: flex; flex-direction: column; background-color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 12px; }
-    #chat-window { flex-grow: 1; overflow-y: auto; padding: 1.5rem; }
-    .message { padding: 12px 18px; margin-bottom: 12px; border-radius: 18px; max-width: 85%; line-height: 1.6; word-wrap: break-word; }
-    .user-message { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; }
-    .ai-message { background-color: #e9ecef; color: #343a40; align-self: flex-start; margin-right: auto; }
-    .ai-message table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-    .ai-message th, .ai-message td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
-    .ai-message th { background-color: #f8f9fa; font-weight: 600; }
-    #chat-form { display: flex; padding: 1rem; border-top: 1px solid #dee2e6; }
-</style>
-{{end}}
-
-{{define "content"}}
-    <h2 style="text-align: center; padding: 1rem; margin: 0; border-bottom: 1px solid #dee2e6;">Internist AI</h2>
-    <div id="chat-window"></div>
-    <form id="chat-form">
-        <input type="text" id="message-input" placeholder="Ask your medical question..." autocomplete="off" style="flex-grow: 1; padding: 12px; border: 1px solid #ccc; border-radius: 20px;">
-        <button type="submit" style="padding: 12px 20px; margin-left: 10px; cursor: pointer;">Send</button>
-    </form>
+    <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="/static/css/components/messages.css">
+    <link rel="stylesheet" href="/static/css/components/sidebar.css">
+    <link rel="stylesheet" href="/static/css/components/skeleton.css">
 {{end}}
 
 {{define "scripts"}}
-<!-- Include Markdown and HTML sanitizer libraries -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <script type="module" src="/static/js/chat/chat.js"></script>
+    <script src="/static/js/credit-manager.js"></script>
+{{end}}
 
-<script>
-    const chatWindow = document.getElementById('chat-window');
-    const chatForm = document.getElementById('chat-form');
-    const messageInput = document.getElementById('message-input');
-    const CHAT_ID = "1";
-
-    function addMessage(content, sender) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${sender}-message`;
-        if (sender === 'ai') {
-            const unsafeHtml = marked.parse(content);
-            messageDiv.innerHTML = DOMPurify.sanitize(unsafeHtml);
-        } else {
-            messageDiv.textContent = content;
-        }
-        chatWindow.appendChild(messageDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-        return messageDiv;
-    }
-
-    chatForm.addEventListener('submit', function(event) {
-        event.preventDefault();
-        const message = messageInput.value.trim();
-        if (!message) return;
-
-        addMessage(message, 'user');
-        messageInput.value = '';
-
-        const aiMessageDiv = addMessage("Thinking...", 'ai');
-        let fullResponse = "";
-
-        const eventSource = new EventSource(`/api/chats/${CHAT_ID}/stream?q=${encodeURIComponent(message)}`);
+{{define "content"}}
+<div class="chat-layout">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="sidebar-title">Internist</h1>
+            <a href="/chat" id="newChatBtn" class="new-chat-btn">+ New Chat</a>
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
         
-        aiMessageDiv.textContent = "";
+        <!-- NEW: Credit Progress Bar Section -->
+        <div class="sidebar-credit">
+            <div class="credit-header">
+                <span class="credit-title">Credits</span>
+                <span class="credit-numbers">
+                    <span id="current-balance">2500</span>/<span class="total-balance">2500</span>
+                </span>
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-bar" id="credit-progress-bar">
+                    <div class="progress-fill" id="credit-progress-fill"></div>
+                    <span class="progress-text" id="credit-percentage">100%</span>
+                </div>
+            </div>
+            
+            <div class="credit-status" id="credit-status">
+                <span class="status-text good">Good standing</span>
+            </div>
+        </div>
+        
+        <nav class="chat-history">
+            <h3 class="history-title">Recent Chats</h3>
+            <ul class="history-list" id="historyList">
+                <!-- History skeleton will be inserted here by JS -->
+            </ul>
+        </nav>
+    </aside>
 
-        // --- CORRECTED ONMESSAGE HANDLER ---
-        eventSource.onmessage = function(event) {
-            try {
-                // 1. Parse the incoming data as a JSON object.
-                const data = JSON.parse(event.data);
+    <main class="chat-main">
+        <div class="chat-content-wrapper">
+            <ul class="messages" id="chatMessages">
+                <!-- Messages skeleton will be inserted here by JS -->
+            </ul>
 
-                // 2. Check if the "content" field exists.
-                if (data.content) {
-                    // 3. Append the text content to our fullResponse accumulator.
-                    fullResponse += data.content;
-                    
-                    // 4. Render the entire accumulated response as Markdown.
-                    const unsafeHtml = marked.parse(fullResponse);
-                    aiMessageDiv.innerHTML = DOMPurify.sanitize(unsafeHtml);
-                    
-                    // 5. Keep the view scrolled to the bottom.
-                    chatWindow.scrollTop = chatWindow.scrollHeight;
-                }
-            } catch (e) {
-                console.error("Failed to parse SSE data:", event.data, e);
-            }
-        };
+            <div class="input-form-container">
+                <form class="input-form" id="chatForm">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <textarea id="chatInput" placeholder="Ask me anything…" rows="1"></textarea>
+                    <button type="submit" aria-label="Send message">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
+                        </svg>
+                    </button>
+                </form>
+                <small class="disclaimer">
+                    Internist may display inaccurate info; double-check its responses.
+                </small>
+            </div>
+        </div>
+    </main>
+</div>
 
-        // All other event handlers are correct and remain the same.
-        eventSource.addEventListener('metadata', function(event) {
-            console.log("Received metadata:", JSON.parse(event.data));
-        });
-
-        eventSource.addEventListener('complete', function(event) {
-            console.log("Consultation complete:", JSON.parse(event.data));
-        });
-
-        eventSource.addEventListener('done', function() {
-            eventSource.close();
-            console.log("Stream closed by server 'done' event.");
-        });
-
-        eventSource.onerror = function(err) {
-            eventSource.close();
-        };
+<!-- Add this script to handle skeleton removal -->
+<script>
+// Ensure skeleton is removed on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Hide any visible skeletons
+    const skeletons = document.querySelectorAll('.skeleton-container, .skeleton, [class*="skeleton"]');
+    skeletons.forEach(skeleton => {
+        if (skeleton.style.display !== 'none') {
+            skeleton.style.display = 'none';
+        }
     });
+    
+    // Remove skeleton classes
+    const elementsWithSkeletonClass = document.querySelectorAll('[class*="skeleton"]');
+    elementsWithSkeletonClass.forEach(element => {
+        element.classList.forEach(className => {
+            if (className.includes('skeleton') && className !== 'skeleton-container') {
+                element.classList.remove(className);
+            }
+        });
+    });
+});
 </script>
 {{end}}

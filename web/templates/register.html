@@ -1,41 +1,49 @@
-{{define "content"}}
-    <h2>Create an Account</h2>
-    <p>Enter your phone number to register.</p>
-    <form id="register-form">
-        <input type="tel" id="phone" name="phone" placeholder="e.g., 9123456789" required style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box;">
-        <button type="submit" style="width: 100%; padding: 10px; cursor: pointer;">Register</button>
-        <p id="error-message" style="color: red;"></p>
-    </form>
-    <p style="text-align: center; margin-top: 1rem;">
-        Already have an account? <a href="/login">Login here</a>.
-    </p>
+{{define "styles"}}
+    <link rel="stylesheet" href="/static/css/auth.css">
 {{end}}
 
-{{define "scripts"}}
-<script>
-    document.getElementById('register-form').addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const phone = document.getElementById('phone').value;
-        const errorMessage = document.getElementById('error-message');
-        errorMessage.textContent = '';
+{{define "content"}}
+<!-- NEW: Wrapper to center the form on the page -->
+<div class="auth-container">
+    <div class="auth-form">
+        <div class="auth-header">
+            <!-- NEW: Added branding for consistency -->
+            <h1>Internist</h1>
+            <h2>Create an Account</h2>
+        </div>
 
-        try {
-            const response = await fetch('/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: phone })
-            });
+        {{if .Error}}
+        <!-- UPDATED: Added a specific class for easier styling -->
+        <p class="form-error">{{.Error}}</p>
+        {{end}}
 
-            if (response.ok) {
-                // On successful registration, redirect to the SMS verification page
-                window.location.href = '/verify-sms';
-            } else {
-                const data = await response.json();
-                errorMessage.textContent = data.error || 'Registration failed. Please try again.';
-            }
-        } catch (error) {
-            errorMessage.textContent = 'A network error occurred.';
-        }
-    });
-</script>
+        <form action="/register" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <!-- UPDATED: Added .form-group for consistent spacing -->
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input id="username" name="username" type="text" required>
+            </div>
+
+            <div class="form-group">
+                <label for="phone_number">Phone Number</label>
+                <input id="phone_number" name="phone_number" type="tel" required> <!-- Changed type to "tel" for better semantics -->
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" required minlength="8">
+            </div>
+
+            <!-- UPDATED: Added classes for button styling -->
+            <button type="submit" class="btn btn-primary">Sign Up</button>
+        </form>
+        
+        <!-- NEW: Wrapper for the footer link -->
+        <div class="auth-footer">
+            <p>Already have an account? <a href="/login">Log in</a></p>
+        </div>
+    </div>
+</div>
 {{end}}
