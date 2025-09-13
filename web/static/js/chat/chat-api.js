@@ -1,26 +1,29 @@
 // File: web/static/js/chat/chat-api.js
-// REFACTORED: Centralized fetch logic and added CSRF protection to DELETE.
+// FIXED: Extract nested data from wrapped API responses
 
 import { Utils } from '../utils.js';
 
 export class ChatAPI {
   constructor() {
-    this.baseUrl = '/api'; // Using a base URL for easier maintenance
+    this.baseUrl = '/api';
   }
 
-  // --- Public API Methods ---
+  // --- FIXED API Methods ---
 
   async fetchHistory() {
-    return this._request('/chats');
+    const response = await this._request('/chats');
+    // FIXED: Extract chats array from wrapped response
+    return response.chats || response || [];
   }
 
   async fetchMessages(chatId) {
     const response = await this._request(`/chats/${chatId}/messages`, {}, { handle404: true });
-    if (response === null) { // Special handling for 404
+    if (response === null) {
         window.location.href = "/chat";
         return null;
     }
-    return response;
+    // FIXED: Extract messages array from wrapped response
+    return response.messages || response || [];
   }
 
   async createChat(title) {
@@ -43,15 +46,7 @@ export class ChatAPI {
     return new EventSource(url);
   }
 
-  // --- Private Helper Methods ---
-
-  /**
-   * Centralized method for making API requests.
-   * @param {string} endpoint - The API endpoint (e.g., '/chats').
-   * @param {object} options - Options for the fetch call (method, body, etc.).
-   * @param {object} config - Internal configuration for this helper.
-   * @returns {Promise<any>} The JSON response.
-   */
+  // --- Rest of your existing methods remain the same ---
   async _request(endpoint, options = {}, config = {}) {
     const url = this.baseUrl + endpoint;
     const method = options.method || 'GET';
@@ -69,17 +64,16 @@ export class ChatAPI {
 
       if (!res.ok) {
         if (res.status === 404 && config.handle404) {
-            return null; // Signal 404 to the caller
+            return null;
         }
         throw new Error(`API request failed: ${res.status} ${res.statusText}`);
       }
       
-      // Handle responses that might not have a body (like DELETE)
       const contentType = res.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         return await res.json();
       }
-      return true; // For successful non-JSON responses
+      return true;
 
     } catch (err) {
       console.error(`Failed to ${method} ${endpoint}:`, err);
@@ -91,19 +85,12 @@ export class ChatAPI {
     }
   }
 
-  /**
-   * Generates the required headers for an API request.
-   * @param {string} method - The HTTP method.
-   * @param {boolean} hasBody - Whether the request has a body.
-   * @returns {HeadersInit} The headers object.
-   */
   _getHeaders(method, hasBody = false) {
     const headers = {};
     if (hasBody) {
       headers['Content-Type'] = 'application/json';
     }
 
-    // Add CSRF token to all state-changing methods
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
       const csrf = document.querySelector("input[name='csrf_token']")?.value;
       if (csrf) {
