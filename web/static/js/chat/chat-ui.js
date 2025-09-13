@@ -104,7 +104,21 @@ export class ChatUI {
         // Render each message
         messages.forEach((msg, index) => {
             const content = msg.Content || msg.content || "";
-            const role = msg.Role || msg.role || "assistant";
+            
+            // FIXED: Proper role extraction with correct fallback logic
+            let role = msg.Role || msg.role || msg.MessageType || msg.messageType;
+            
+            // If still no role, determine by message pattern or default to user
+            if (!role) {
+                // You can add logic here to determine role based on content or position
+                // For now, let's check if it's an odd/even pattern (user/assistant alternating)
+                role = index % 2 === 0 ? "user" : "assistant";
+            }
+            
+            // Ensure valid role values
+            if (role !== "user" && role !== "assistant") {
+                role = role.toLowerCase() === "user" ? "user" : "assistant";
+            }
             
             console.log(`[ChatUI] Message ${index + 1}: ${role} - ${content.substring(0, 50)}...`);
             
@@ -116,6 +130,7 @@ export class ChatUI {
         setTimeout(() => this.removeAllSkeletons(), 100);
         console.log("[ChatUI] All messages rendered successfully");
     }
+
 
     // === SKELETON LOADER METHODS ===
 
