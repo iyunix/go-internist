@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"strings"
 
 	"github.com/glebarez/sqlite"
 	"github.com/gorilla/mux"
@@ -46,30 +47,37 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// G:\go_internist\cmd\server\main.go
-
 func cspMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // --- This is the new, corrected policy ---
-        csp := "default-src 'self'; " +
-               // Allow scripts from Tailwind's CDN
-               "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; " +
-               // Allow stylesheets from Google Fonts
-               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-               // Allow font files to be loaded from Google's static domain
-               "font-src https://fonts.gstatic.com; " +
-               // Allow images from self (your domain)
-               "img-src 'self' data:; " +
-               "connect-src 'self';"
+  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    // Build CSP with proper source expressions (no Markdown link syntax)
+    directives := []string{
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data:",
+      // Keep inline styles only if really needed; remove 'unsafe-inline' if not
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      // Add the Perplexity CDN only if required by your CSS; otherwise drop it
+      "font-src 'self' https://fonts.gstatic.com https://r2cdn.perplexity.ai",
+      // Keep scripts self-hosted; add nonces instead of 'unsafe-inline' if needed later
+      "script-src 'self'",
+      // Allow same-origin fetch/XHR/SSE connections
+      "connect-src 'self'",
+      "frame-src 'none'",
+      "media-src 'self'",
+      "worker-src 'self'",
+    }
+    csp := strings.Join(directives, "; ")
 
-        w.Header().Set("Content-Security-Policy", csp)
-        w.Header().Set("X-Frame-Options", "DENY")
-        w.Header().Set("X-Content-Type-Options", "nosniff")
-        w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-        
-        next.ServeHTTP(w, r)
-    })
+    w.Header().Set("Content-Security-Policy", csp)
+    w.Header().Set("X-Frame-Options", "DENY")
+    w.Header().Set("X-Content-Type-Options", "nosniff")
+    w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+    next.ServeHTTP(w, r)
+  })
 }
+
 func main() {
 	startTime := time.Now()
 

@@ -1,148 +1,112 @@
 {{define "styles"}}
   <link rel="stylesheet" href="/static/css/output.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap">
+  <style>
+    :root {
+      --primary-color: #13a4ec;
+      --background-color: #f8fafc;
+      --text-primary: #1e293b;
+      --text-secondary: #64748b;
+      --container-bg: #ffffff;
+      --input-bg: #f1f5f9;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    /* Stronger right alignment for user messages */
+    #chatMessages li.user-message { justify-content: flex-end !important; }
+    #chatMessages li.user-message .flex-row-reverse { justify-content: flex-end; }
+    #chatMessages li.user-message .text-right { text-align: right !important; }
+    /* Centered modal always */
+    #confirmation-modal-overlay { display: flex !important; align-items: center !important; justify-content: center !important; }
+  </style>
 {{end}}
 
 {{define "content"}}
-  <div class="flex h-screen w-full bg-[var(--background-color)] text-[var(--text-primary)]">
-    <aside class="flex w-64 shrink-0 flex-col border-r border-gray-200 bg-[var(--container-bg)]">
-      <div class="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-4">
-        <a href="/chat" class="flex items-center gap-3">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary-color)] text-white">
-            <span class="material-symbols-outlined text-xl">health_and_safety</span>
-          </div>
-          <h1 class="text-xl font-bold">Internist AI</h1>
-        </a>
+<div class="flex h-screen w-full">
+  <aside class="flex w-64 shrink-0 flex-col border-r border-gray-200 bg-[var(--container-bg)]">
+    <div class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6">
+      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary-color)] text-white">
+        <span class="material-symbols-outlined text-xl">health_and_safety</span>
       </div>
-      <div class="flex flex-col gap-4 p-4">
-        <a href="/chat" id="newChatBtn" class="flex w-full items-center justify-center gap-2 rounded-md bg-[var(--primary-color)] px-3 py-2 text-sm font-medium text-white hover:bg-opacity-90">
-          <span class="material-symbols-outlined text-lg">add</span>
-          New Chat
-        </a>
-      </div>
-      <div class="flex-1 overflow-y-auto">
-        <nav class="flex flex-col px-4">
-          <h2 class="mb-2 text-xs font-semibold uppercase text-[var(--text-secondary)]">Previous Chats</h2>
-          <div id="historyList" class="flex flex-col space-y-1"></div>
-        </nav>
-      </div>
-      <div class="border-t border-gray-200 p-4">
-        <a href="/logout" class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-gray-100">
-          <span class="material-symbols-outlined text-lg">logout</span>
-          <span>Logout</span>
-        </a>
-      </div>
-    </aside>
-    <div class="flex h-screen w-full flex-col">
-      <header class="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-[var(--container-bg)] px-6">
-        <div></div>
-        <div class="flex items-center gap-4">
-          <div class="text-sm text-[var(--text-secondary)]">
-            <span id="current-balance">--</span> Credits
-          </div>
-          <div class="h-10 w-10 rounded-full bg-cover bg-center" style='background-image: url("/static/img/user-avatar.png");'></div>
-        </div>
-      </header>
-      <main class="flex flex-1 flex-col overflow-y-auto">
-        <div id="chatMessages" class="mx-auto w-full max-w-4xl flex-1 space-y-8 px-4 py-8 sm:px-6 lg:px-8"></div>
-        <div class="sticky bottom-0 bg-[var(--background-color)]/80 backdrop-blur-sm">
-          <div class="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6 lg:px-8">
-            <form id="chatForm" class="relative">
-              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-              <textarea id="chatInput" class="w-full rounded-full border-gray-300 bg-[var(--input-bg)] py-3 pl-5 pr-28 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" placeholder="Ask me anything..." rows="1"></textarea>
-              <div class="absolute inset-y-0 right-3 flex items-center gap-2">
-                <button type="submit" class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-color)] text-white hover:bg-opacity-90 disabled:bg-gray-400" aria-label="Send message">
-                  <span class="material-symbols-outlined text-xl">send</span>
-                </button>
-              </div>
-            </form>
-            <small class="mt-2 block text-center text-xs text-gray-500">
-              Internist may display inaccurate info; double-check its responses.
-            </small>
-          </div>
-        </div>
-      </main>
+      <h1 class="text-xl font-bold text-[var(--text-primary)]">Internist AI</h1>
     </div>
+    <div class="flex-1 overflow-y-auto">
+      <nav class="flex flex-col p-4">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="text-xs font-semibold uppercase text-[var(--text-secondary)]">Previous Chats</h2>
+          <button id="newChatBtn" class="ml-2 px-2 py-1 rounded-md text-xs font-semibold bg-[var(--primary-color)] text-white hover:bg-opacity-90">+ New</button>
+        </div>
+        <ul id="historyList" class="space-y-1"></ul>
+      </nav>
+    </div>
+    <div class="border-t border-gray-200 p-4">
+      <div class="rounded-lg bg-gray-100 p-3 text-center">
+        <p class="text-xs text-[var(--text-secondary)]">
+          <span id="current-balance">—</span>
+        </p>
+        <p class="text-xs text-[var(--text-secondary)] mt-1">Credits are charged per character.</p>
+      </div>
+    </div>
+  </aside>
+  <div class="flex h-screen w-full flex-col">
+    <header class="flex h-16 shrink-0 items-center justify-end border-b border-gray-200 bg-[var(--container-bg)] px-6">
+      <div class="flex items-center gap-4">
+        <button class="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-gray-100">
+          <span class="material-symbols-outlined text-2xl">help</span>
+        </button>
+        <div class="h-10 w-10 rounded-full bg-cover bg-center"
+          style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCaHCl_bsNMgyEaxOCts0penkpXrFJqio4ilwLWMnMXBlAmrrxIJlXO-igXGgaPS-xjE3wdAploDzxZJxfUWx4KlmNXw3s9Hu_BGlIcIQYHN_vayJCm3IS0VKXdn1fk7WYcRllCnW1Rel8Z75IKjYkUf2lxaB6v1Idgy6NQDepYWgsgBvmG4udYpk7khdya5eYf8yZxfPt2HZ1mgjiDuGHSw66sBDtvaCv9rPkto69Iiu5mADW6ZnCdFNfAZhXgjXjqRqy8zNJM7B10");'>
+        </div>
+      </div>
+    </header>
+    <main class="flex flex-1 flex-col overflow-y-auto">
+      <div class="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+        <ul id="chatMessages" class="space-y-6"></ul>
+      </div>
+      <form id="chatForm" class="sticky bottom-0 bg-[var(--background-color)]/80 backdrop-blur-sm w-full">
+        <div class="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6 lg:px-8">
+          <div class="relative flex items-center">
+            <textarea id="chatInput"
+              class="w-full rounded-full border-gray-300 bg-[var(--input-bg)] py-3 pl-5 pr-28 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)] resize-none"
+              placeholder="Type your message here..." rows="1" required></textarea>
+            <div class="absolute inset-y-0 right-3 flex items-center gap-2">
+              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-gray-200">
+                <span class="material-symbols-outlined text-xl">mic</span>
+              </button>
+              <button type="submit" class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-color)] text-white hover:bg-opacity-90">
+                <span class="material-symbols-outlined text-xl">send</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </main>
   </div>
+</div>
 {{end}}
 
 {{define "scripts"}}
-  <!-- Vendor -->
   <script src="/static/js/vendor/marked.umd.js"></script>
   <script src="/static/js/vendor/purify.min.js"></script>
-  <!-- Markdown + utils -->
   <script src="/static/js/markdown_renderer.js"></script>
-  <script src="/static/js/logger.js"></script>
-  <script src="/static/js/utils.js"></script>
-  <!-- Chat app -->
-  <script type="module">
-    import { ChatAPI } from '/static/js/chat/chat-api.js';
-    import { ChatUI }  from '/static/js/chat/chat-ui.js';
-
-    const els = {
-      chatMessages: document.getElementById('chatMessages'),
-      chatForm:     document.getElementById('chatForm'),
-      chatInput:    document.getElementById('chatInput'),
-    };
-
-    const api = new ChatAPI();
-    const ui  = new ChatUI(els);
-
-    // Example bootstrap: load history then messages for the first chat (adapt for your router/state)
-    async function init() {
-      const chats = await api.fetchHistory();
-      if (!Array.isArray(chats) || chats.length === 0) return;
-
-      const chatId = String(chats[0].id ?? chats[0].ID);
-      const messages = await api.fetchMessages(chatId);
-      ui.renderMessages(messages);
-
-      // Hook up sending and streaming
-      els.chatForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const prompt = els.chatInput.value.trim();
-        if (!prompt) return;
-
-        // Show user message immediately
-        ui.displayMessage(prompt, 'user', { showLoader: false });
-
-        // Create assistant bubble with a loader
-        const assistantLi = ui.displayMessage('', 'assistant', { showLoader: true });
-        const bubble = ui.lastAssistantMessageBubble;
-
-        // Stream
-        const es = api.createStream(chatId, prompt);
-        // Default messages: chunked JSON with {content}
-        es.onmessage = (evt) => {
-          try {
-            const { content } = JSON.parse(evt.data || '{}');
-            if (content && window.MarkdownRenderer && bubble) {
-              // progressively stream markdown
-              const stream = window.MarkdownRenderer.createStream(bubble, { debounceMs: 50 });
-              stream.append(content);
-            }
-          } catch {}
-        };
-        es.addEventListener('metadata', (evt) => {
-          // Handle sources etc. if needed
-          // console.log('metadata', evt.data);
-        });
-        es.addEventListener('error', (evt) => {
-          // Render an inline error or toast
-        });
-        es.addEventListener('complete', (evt) => {
-          // finalize UI
-        });
-        es.addEventListener('done', () => es.close());
-
-        els.chatInput.value = '';
-      });
-    }
-
-    init();
-  </script>
-
   <script type="module" src="/static/js/chat/chat.js"></script>
-  <script src="/static/js/credit-manager.js"></script>
+  <script type="module" src="/static/js/chat/chat-ui.js"></script>
+  <script type="module" src="/static/js/chat/chat-api.js"></script>
+  <script type="module" src="/static/js/chat/chat-stream.js"></script>
+  <script>
+    // Load current credit when page loads
+    async function updateCreditBalance() {
+      try {
+        const res = await fetch('/api/user/balance');
+        const data = await res.json();
+        const credit = data?.credit ?? data?.balance ?? data?.data?.credit ?? data?.data?.balance ?? '—';
+        const creditElem = document.getElementById('userCredit');
+        if (creditElem) creditElem.textContent = credit;
+      } catch {/* ignore */}
+    }
+    document.addEventListener('DOMContentLoaded', updateCreditBalance);
+  </script>
 {{end}}

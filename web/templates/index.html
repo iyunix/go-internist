@@ -1,12 +1,12 @@
 {{template "layout.html" .}}
 
 {{define "styles"}}
-    {{/* --- Tailwind CSS, Google Fonts & Icons --- */}}
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <!-- Use only compiled Tailwind CSS, Google Fonts, and Material Symbols. No CDN JS script. -->
+    <link rel="stylesheet" href="/static/css/output.css" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?display=swap&family=Inter%3Awght%40400%3B500%3B600%3B700%3B900&family=Noto+Sans%3Awght%40400%3B500%3B700%3B900">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?display=swap&family=Inter:wght@400;500;600;700;900&family=Noto+Sans:wght@400;500;700;900">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
-    <style type="text/tailwindcss">
+    <style>
         :root {
             --primary-50: #f0f9ff;
             --primary-100: #e0f2fe;
@@ -20,7 +20,7 @@
             --primary-900: #0c4a6e;
         }
         body {
-            font-family: Inter, "Noto Sans", sans-serif;
+            font-family: 'Inter', 'Noto Sans', sans-serif;
         }
     </style>
 {{end}}
@@ -121,7 +121,8 @@
                 <div class="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3">
                     <div class="flex flex-col gap-4">
                         <div class="aspect-h-2 aspect-w-3 w-full overflow-hidden rounded-xl">
-                            <img alt="Doctor reviewing patient chart" class="h-full w-full object-cover" src="/static/img/benefit-1.jpg"/>
+                            <!-- UNCOMMENT if file exists: -->
+                            <!-- <img alt="Doctor reviewing patient chart" class="h-full w-full object-cover" src="/static/img/benefit-1.jpg"/> -->
                         </div>
                         <div>
                             <h3 class="text-lg font-semibold text-slate-900">Improved Patient Outcomes</h3>
@@ -130,7 +131,8 @@
                     </div>
                     <div class="flex flex-col gap-4">
                         <div class="aspect-h-2 aspect-w-3 w-full overflow-hidden rounded-xl">
-                            <img alt="Healthcare professionals collaborating" class="h-full w-full object-cover" src="/static/img/benefit-2.jpg"/>
+                            <!-- UNCOMMENT if file exists: -->
+                            <!-- <img alt="Healthcare professionals collaborating" class="h-full w-full object-cover" src="/static/img/benefit-2.jpg"/> -->
                         </div>
                         <div>
                             <h3 class="text-lg font-semibold text-slate-900">Increased Efficiency</h3>
@@ -139,7 +141,8 @@
                     </div>
                     <div class="flex flex-col gap-4">
                         <div class="aspect-h-2 aspect-w-3 w-full overflow-hidden rounded-xl">
-                            <img alt="Surgeon in an operating room" class="h-full w-full object-cover" src="/static/img/benefit-3.jpg"/>
+                            <!-- UNCOMMENT if file exists: -->
+                            <!-- <img alt="Surgeon in an operating room" class="h-full w-full object-cover" src="/static/img/benefit-3.jpg"/> -->
                         </div>
                         <div>
                             <h3 class="text-lg font-semibold text-slate-900">Enhanced Clinical Decision-Making</h3>
