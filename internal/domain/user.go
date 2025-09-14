@@ -71,6 +71,11 @@ type User struct {
     
     CreatedAt time.Time `json:"created_at"`
     UpdatedAt time.Time `json:"updated_at"`
+
+
+    PasswordResetCode      string     `gorm:"index" json:"-"`
+    PasswordResetExpiresAt *time.Time `gorm:"default:null" json:"-"`
+
 }
 
 // --- All helper functions below remain unchanged ---

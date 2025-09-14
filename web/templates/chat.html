@@ -1,112 +1,288 @@
-{{define "styles"}}
-  <link rel="stylesheet" href="/static/css/output.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap">
-  <style>
-    :root {
-      --primary-color: #13a4ec;
-      --background-color: #f8fafc;
-      --text-primary: #1e293b;
-      --text-secondary: #64748b;
-      --container-bg: #ffffff;
-      --input-bg: #f1f5f9;
-    }
-    body {
-      font-family: 'Inter', sans-serif;
-    }
-    /* Stronger right alignment for user messages */
-    #chatMessages li.user-message { justify-content: flex-end !important; }
-    #chatMessages li.user-message .flex-row-reverse { justify-content: flex-end; }
-    #chatMessages li.user-message .text-right { text-align: right !important; }
-    /* Centered modal always */
-    #confirmation-modal-overlay { display: flex !important; align-items: center !important; justify-content: center !important; }
-  </style>
-{{end}}
+{{define "title"}}Internist AI - Chat{{end}}
 
 {{define "content"}}
-<div class="flex h-screen w-full">
-  <aside class="flex w-64 shrink-0 flex-col border-r border-gray-200 bg-[var(--container-bg)]">
-    <div class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary-color)] text-white">
-        <span class="material-symbols-outlined text-xl">health_and_safety</span>
-      </div>
-      <h1 class="text-xl font-bold text-[var(--text-primary)]">Internist AI</h1>
-    </div>
-    <div class="flex-1 overflow-y-auto">
-      <nav class="flex flex-col p-4">
-        <div class="flex justify-between items-center mb-2">
-          <h2 class="text-xs font-semibold uppercase text-[var(--text-secondary)]">Previous Chats</h2>
-          <button id="newChatBtn" class="ml-2 px-2 py-1 rounded-md text-xs font-semibold bg-[var(--primary-color)] text-white hover:bg-opacity-90">+ New</button>
+<div class="flex h-screen w-full bg-white font-sans">
+    <aside class="flex w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
+        <div class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6">
+            <a href="/chat" class="flex items-center gap-3">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#13a4ec] text-white">
+                    <span class="material-symbols-outlined text-xl">health_and_safety</span>
+                </div>
+                <h1 class="text-xl font-bold text-[#1e293b]">Internist AI</h1>
+            </a>
         </div>
-        <ul id="historyList" class="space-y-1"></ul>
-      </nav>
-    </div>
-    <div class="border-t border-gray-200 p-4">
-      <div class="rounded-lg bg-gray-100 p-3 text-center">
-        <p class="text-xs text-[var(--text-secondary)]">
-          <span id="current-balance">—</span>
-        </p>
-        <p class="text-xs text-[var(--text-secondary)] mt-1">Credits are charged per character.</p>
-      </div>
-    </div>
-  </aside>
-  <div class="flex h-screen w-full flex-col">
-    <header class="flex h-16 shrink-0 items-center justify-end border-b border-gray-200 bg-[var(--container-bg)] px-6">
-      <div class="flex items-center gap-4">
-        <button class="flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-gray-100">
-          <span class="material-symbols-outlined text-2xl">help</span>
-        </button>
-        <div class="h-10 w-10 rounded-full bg-cover bg-center"
-          style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCaHCl_bsNMgyEaxOCts0penkpXrFJqio4ilwLWMnMXBlAmrrxIJlXO-igXGgaPS-xjE3wdAploDzxZJxfUWx4KlmNXw3s9Hu_BGlIcIQYHN_vayJCm3IS0VKXdn1fk7WYcRllCnW1Rel8Z75IKjYkUf2lxaB6v1Idgy6NQDepYWgsgBvmG4udYpk7khdya5eYf8yZxfPt2HZ1mgjiDuGHSw66sBDtvaCv9rPkto69Iiu5mADW6ZnCdFNfAZhXgjXjqRqy8zNJM7B10");'>
+        <div class="flex flex-1 flex-col overflow-y-auto p-4">
+            <button id="new-chat-btn" class="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-[#1e293b] hover:bg-gray-100">
+                <span class="material-symbols-outlined text-lg">add</span>
+                New Chat
+            </button>
+            <nav id="chat-list-container" class="flex flex-col">
+                <h2 class="mb-2 text-xs font-semibold uppercase text-[#64748b]">Previous Chats</h2>
+                {{range .Chats}}
+                <div class="group mt-1 flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-gray-100 {{if eq .ID $.ActiveChatID}}bg-gray-100{{end}}" data-chat-item-id="{{.ID}}">
+                    <a class="flex items-center gap-3 truncate w-full" href="/chat?id={{.ID}}">
+                        <span class="material-symbols-outlined text-lg text-[#64748b]">chat_bubble</span>
+                        <span class="truncate">{{.Title}}</span>
+                    </a>
+                    <button class="delete-chat-btn flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-800"
+                            data-chat-id="{{.ID}}"
+                            title="Delete chat">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                </div>
+                {{end}}
+            </nav>
         </div>
-      </div>
-    </header>
-    <main class="flex flex-1 flex-col overflow-y-auto">
-      <div class="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        <ul id="chatMessages" class="space-y-6"></ul>
-      </div>
-      <form id="chatForm" class="sticky bottom-0 bg-[var(--background-color)]/80 backdrop-blur-sm w-full">
-        <div class="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6 lg:px-8">
-          <div class="relative flex items-center">
-            <textarea id="chatInput"
-              class="w-full rounded-full border-gray-300 bg-[var(--input-bg)] py-3 pl-5 pr-28 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)] resize-none"
-              placeholder="Type your message here..." rows="1" required></textarea>
-            <div class="absolute inset-y-0 right-3 flex items-center gap-2">
-              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-gray-200">
-                <span class="material-symbols-outlined text-xl">mic</span>
-              </button>
-              <button type="submit" class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-color)] text-white hover:bg-opacity-90">
-                <span class="material-symbols-outlined text-xl">send</span>
-              </button>
+        <div id="balance-container" class="border-t border-gray-200 p-4">
+            <div class="rounded-lg bg-gray-100 p-3">
+                <div class="flex justify-between text-xs font-medium text-[#64748b]">
+                    <span>Credits Remaining</span>
+                    <span>{{.User.CharacterBalance}} / {{.User.TotalCharacterBalance}}</span>
+                </div>
+                <div class="mt-1 h-2 w-full rounded-full bg-gray-300">
+                    <div class="h-2 rounded-full bg-[#13a4ec]" style="width: {{percentage .User.CharacterBalance .User.TotalCharacterBalance}}%;"></div>
+                </div>
             </div>
-          </div>
         </div>
-      </form>
-    </main>
-  </div>
+    </aside>
+
+    <div class="flex h-screen w-full flex-col">
+        <header class="flex h-16 shrink-0 items-center justify-end border-b border-gray-200 bg-white px-6">
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-medium text-gray-700">{{.User.Username}}</span>
+                <a href="/logout" title="Logout" class="flex h-10 w-10 items-center justify-center rounded-full text-[#64748b] hover:bg-gray-100">
+                    <span class="material-symbols-outlined text-2xl">logout</span>
+                </a>
+            </div>
+        </header>
+        <main class="flex flex-1 flex-col overflow-y-auto bg-[#f8fafc]">
+            <div id="message-container" class="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+                <div class="space-y-8">
+                    {{if not .Messages}}
+                    <div class="text-center" id="welcome-message">
+                        <h2 class="text-3xl font-bold text-[#1e293b]">Welcome, {{.User.Username}}</h2>
+                        <p class="mt-2 text-[#64748b]">How can I help you today?</p>
+                    </div>
+                    {{end}}
+                    {{range .Messages}}
+                        {{if eq .MessageType "assistant"}}
+                        <div class="flex items-start gap-3 group">
+                            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-200"><span class="material-symbols-outlined text-[#64748b]">smart_toy</span></div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-[#64748b]">Internist AI</p>
+                                <div class="relative mt-1">
+                                    <div class="message-content prose prose-lg max-w-none rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]">{{.RenderedContent}}</div>
+                                    <button onclick="exportMessageAsPDF(this.parentElement.querySelector('.message-content').innerHTML)" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-full shadow-sm hover:bg-gray-200"><span class="material-symbols-outlined text-base text-gray-600">picture_as_pdf</span></button>
+                                </div>
+                            </div>
+                        </div>
+                        {{else if eq .MessageType "user"}}
+                        <div class="flex items-start justify-end gap-3">
+                            <div class="flex-1">
+                                <p class="text-right text-sm font-medium text-[#64748b]">{{$.User.Username}}</p>
+                                <div class="mt-1 rounded-lg rounded-tr-none bg-[#13a4ec] p-3 text-base text-white">{{.Content}}</div>
+                            </div>
+                        </div>
+                        {{end}}
+                    {{end}}
+                </div>
+            </div>
+            <div class="sticky bottom-0 bg-[#f8fafc]/80 backdrop-blur-sm">
+                 <div class="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6 lg:px-8">
+                    {{if gt .User.CharacterBalance 0}}
+                        <form id="chat-form" class="relative">
+                            <input id="message-input" class="w-full rounded-full border-gray-300 bg-[#f1f5f9] py-3 pl-5 pr-14 text-base text-[#1e293b] placeholder:text-[#64748b] focus:border-[#13a4ec] focus:ring-[#13a4ec]" placeholder="Type your message here..." type="text" autocomplete="off" />
+                            <button id="send-button" type="submit" class="absolute inset-y-0 right-3 flex h-8 w-8 my-auto items-center justify-center rounded-full bg-[#13a4ec] text-white hover:bg-opacity-90"><span class="material-symbols-outlined text-xl">send</span></button>
+                        </form>
+                    {{else}}
+                        <div class="flex items-center justify-between rounded-full border border-gray-300 bg-gray-100 p-2 pl-5">
+                            <p class="text-sm font-medium text-gray-500">You have run out of credits.</p>
+                            <a href="https://t.me/internist_support" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full bg-green-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-600"><span class="material-symbols-outlined text-base">contact_support</span><span>Contact Support</span></a>
+                        </div>
+                    {{end}}
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<div id="delete-confirm-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div class="flex items-start">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 sm:h-10 sm:w-10"><span class="material-symbols-outlined text-red-600">warning</span></div>
+            <div class="ml-4 text-left">
+                <h3 class="text-lg font-semibold leading-6 text-gray-900">Delete Chat</h3>
+                <div class="mt-2"><p class="text-sm text-gray-500">Are you sure you want to delete this chat? This action cannot be undone.</p></div>
+            </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+            <button id="modal-confirm-delete-btn" type="button" class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto">Delete</button>
+            <button id="modal-cancel-btn" type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+        </div>
+    </div>
 </div>
 {{end}}
 
+{{define "styles"}}
+<style>
+  .typing-indicator span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: currentColor; animation: typing 1s infinite; }
+  .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+</style>
+{{end}}
+
 {{define "scripts"}}
-  <script src="/static/js/vendor/marked.umd.js"></script>
-  <script src="/static/js/vendor/purify.min.js"></script>
-  <script src="/static/js/markdown_renderer.js"></script>
-  <script type="module" src="/static/js/chat/chat.js"></script>
-  <script type="module" src="/static/js/chat/chat-ui.js"></script>
-  <script type="module" src="/static/js/chat/chat-api.js"></script>
-  <script type="module" src="/static/js/chat/chat-stream.js"></script>
-  <script>
-    // Load current credit when page loads
-    async function updateCreditBalance() {
-      try {
-        const res = await fetch('/api/user/balance');
-        const data = await res.json();
-        const credit = data?.credit ?? data?.balance ?? data?.data?.credit ?? data?.data?.balance ?? '—';
-        const creditElem = document.getElementById('userCredit');
-        if (creditElem) creditElem.textContent = credit;
-      } catch {/* ignore */}
+<script>
+    const currentUsername = "{{.User.Username}}";
+    let activeChatID = {{.ActiveChatID}};
+    if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') { console.error("CRITICAL ERROR: Libraries not loaded."); }
+    const chatForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const messageContainer = document.getElementById('message-container').querySelector('.space-y-8');
+    const newChatBtn = document.getElementById('new-chat-btn');
+    const mainChatArea = document.querySelector('main.flex-1.flex-col');
+    const chatListContainer = document.getElementById('chat-list-container');
+    const deleteModal = document.getElementById('delete-confirm-modal');
+    const confirmDeleteBtn = document.getElementById('modal-confirm-delete-btn');
+    const cancelDeleteBtn = document.getElementById('modal-cancel-btn');
+
+    function scrollToBottom() { if (mainChatArea) { mainChatArea.scrollTop = mainChatArea.scrollHeight; } }
+    window.onload = scrollToBottom;
+
+    if (chatListContainer) {
+        chatListContainer.addEventListener('click', (e) => {
+            const deleteButton = e.target.closest('.delete-chat-btn');
+            if (deleteButton) {
+                e.preventDefault();
+                e.stopPropagation();
+                const chatId = deleteButton.dataset.chatId;
+                confirmDeleteBtn.dataset.chatId = chatId;
+                deleteModal.classList.remove('hidden');
+            }
+        });
     }
-    document.addEventListener('DOMContentLoaded', updateCreditBalance);
-  </script>
+
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async () => {
+            const chatId = confirmDeleteBtn.dataset.chatId;
+            deleteModal.classList.add('hidden');
+            try {
+                const response = await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Failed to delete chat on server.');
+                document.querySelector(`div[data-chat-item-id='${chatId}']`).remove();
+                if (activeChatID && parseInt(chatId) === activeChatID) {
+                    window.location.href = '/chat';
+                }
+            } catch (error) {
+                console.error('Error deleting chat:', error);
+                alert('Could not delete the chat. Please try again.');
+            }
+        });
+    }
+
+    if (cancelDeleteBtn) {
+        cancelDeleteBtn.addEventListener('click', () => {
+            deleteModal.classList.add('hidden');
+        });
+    }
+
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', async () => {
+            const title = prompt("Enter a title for your new chat:");
+            if (title && title.trim() !== "") {
+                try {
+                    const response = await fetch('/api/chats', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: title })
+                    });
+                    if (!response.ok) throw new Error('Failed to create chat');
+                    const newChat = await response.json();
+                    window.location.href = `/chat?id=${newChat.id}`;
+                } catch (error) {
+                    console.error('Error creating new chat:', error);
+                    alert('Could not create a new chat.');
+                }
+            }
+        });
+    }
+
+    if (chatForm) {
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const prompt = messageInput.value.trim();
+            if (prompt) {
+                sendMessage(prompt);
+            }
+        });
+    }
+
+    async function sendMessage(prompt) {
+        const welcomeMsg = document.getElementById('welcome-message');
+        if (welcomeMsg) { welcomeMsg.remove(); }
+        let currentChatId = activeChatID;
+        if (currentChatId === 0) {
+            try {
+                const title = prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt;
+                const resp = await fetch('/api/chats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+                if (!resp.ok) throw new Error('Server failed to create chat.');
+                const newChat = await resp.json();
+                currentChatId = newChat.id;
+                activeChatID = newChat.id;
+                history.pushState({}, '', `/chat?id=${currentChatId}`);
+                const newChatHTML = `<div class="group mt-1 flex items-center justify-between gap-3 rounded-md px-3 py-2 bg-gray-100 hover:bg-gray-100" data-chat-item-id="${newChat.id}"><a class="flex items-center gap-3 truncate w-full" href="/chat?id=${newChat.id}"><span class="material-symbols-outlined text-lg text-[#64748b]">chat_bubble</span><span class="truncate">${newChat.title}</span></a><button class="delete-chat-btn flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-800" data-chat-id="${newChat.id}" title="Delete chat"><span class="material-symbols-outlined text-base">delete</span></button></div>`;
+                const previousChatsHeader = chatListContainer.querySelector('h2');
+                previousChatsHeader.insertAdjacentHTML('afterend', newChatHTML);
+            } catch (err) { console.error('Error creating chat:', err); alert('Could not start a new chat session.'); return; }
+        }
+        messageInput.value = ''; messageInput.disabled = true; sendButton.disabled = true;
+        try {
+            const response = await fetch(`/api/chats/${currentChatId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: prompt, messageType: 'user' })
+            });
+            if (!response.ok) throw new Error("Failed to save user message.");
+        } catch (error) {
+            console.error("Error saving user message:", error);
+            alert("Could not send message. Please try again.");
+            messageInput.disabled = false; sendButton.disabled = false; return;
+        }
+        const safePrompt = prompt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        messageContainer.insertAdjacentHTML('beforeend', `<div class="flex items-start justify-end gap-3"><div class="flex-1"><p class="text-right text-sm font-medium text-[#64748b]">${currentUsername}</p><div class="mt-1 rounded-lg rounded-tr-none bg-[#13a4ec] p-3 text-base text-white">${safePrompt}</div></div></div>`);
+        scrollToBottom();
+        const assistantId = 'assistant-' + Date.now();
+        messageContainer.insertAdjacentHTML('beforeend', `<div class="flex items-start gap-3 group"><div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-200"><span class="material-symbols-outlined text-[#64748b]">smart_toy</span></div><div class="flex-1"><p class="text-sm font-medium text-[#64748b]">Internist AI</p><div class="relative mt-1"><div id="${assistantId}" class="message-content prose prose-lg max-w-none rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]"><div class="typing-indicator"><span></span><span></span><span></span></div></div><button onclick="exportMessageAsPDF(this.parentElement.querySelector('.message-content').innerHTML)" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-full shadow-sm hover:bg-gray-200" style="display: none;"><span class="material-symbols-outlined text-base text-gray-600">picture_as_pdf</span></button></div></div></div>`);
+        scrollToBottom();
+        const assistantEl = document.getElementById(assistantId);
+        let fullResponseText = '';
+        const eventSource = new EventSource(`/api/chats/${currentChatId}/stream?q=${encodeURIComponent(prompt)}`);
+        let isFirstChunk = true;
+        eventSource.onmessage = ev => { if (isFirstChunk) { assistantEl.innerHTML = ''; isFirstChunk = false; } const data = JSON.parse(ev.data); fullResponseText += data.content; assistantEl.innerHTML = DOMPurify.sanitize(marked.parse(fullResponseText)); scrollToBottom(); };
+        eventSource.addEventListener('done', () => { eventSource.close(); const exportBtn = assistantEl.nextElementSibling; if(exportBtn) exportBtn.style.display = 'block'; messageInput.disabled = false; sendButton.disabled = false; messageInput.focus(); });
+        eventSource.onerror = () => { eventSource.close(); assistantEl.innerHTML = '<p class="text-red-500">Sorry, an error occurred.</p>'; messageInput.disabled = false; sendButton.disabled = false; messageInput.focus(); };
+    }
+    async function exportMessageAsPDF(messageHTML) {
+        try {
+            const response = await fetch('/static/pdf_template.html');
+            if (!response.ok) throw new Error('PDF template not found.');
+            const templateHTML = await response.text();
+            const printWindow = window.open('', '_blank', 'height=800,width=800');
+            printWindow.document.write(templateHTML);
+            printWindow.document.close();
+            printWindow.onload = function() {
+                const dateElement = printWindow.document.getElementById('generation-date');
+                const contentElement = printWindow.document.getElementById('ai-content-container');
+                if (dateElement) dateElement.textContent = new Date().toLocaleString();
+                if (contentElement) contentElement.innerHTML = DOMPurify.sanitize(messageHTML);
+                setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
+            };
+        } catch (error) {
+            console.error('Error exporting to PDF:', error);
+            alert('Could not generate PDF. Please try again.');
+        }
+    }
+</script>
 {{end}}

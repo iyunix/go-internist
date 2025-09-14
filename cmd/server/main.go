@@ -8,9 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
-	"strings"
 
 	"github.com/glebarez/sqlite"
 	"github.com/gorilla/mux"
@@ -30,7 +30,7 @@ import (
 	"github.com/iyunix/go-internist/internal/services/user_services"
 )
 
-// CORS only (no CSP here)
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -48,34 +48,32 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func cspMiddleware(next http.Handler) http.Handler {
-  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    // Build CSP with proper source expressions (no Markdown link syntax)
-    directives := []string{
-      "default-src 'self'",
-      "base-uri 'self'",
-      "object-src 'none'",
-      "frame-ancestors 'none'",
-      "img-src 'self' data:",
-      // Keep inline styles only if really needed; remove 'unsafe-inline' if not
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      // Add the Perplexity CDN only if required by your CSS; otherwise drop it
-      "font-src 'self' https://fonts.gstatic.com https://r2cdn.perplexity.ai",
-      // Keep scripts self-hosted; add nonces instead of 'unsafe-inline' if needed later
-      "script-src 'self'",
-      // Allow same-origin fetch/XHR/SSE connections
-      "connect-src 'self'",
-      "frame-src 'none'",
-      "media-src 'self'",
-      "worker-src 'self'",
-    }
-    csp := strings.Join(directives, "; ")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		directives := []string{
+			"default-src 'self'",
+			"base-uri 'self'",
+			"object-src 'none'",
+			"frame-ancestors 'none'",
+			"img-src 'self' data:",
+			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+			"font-src 'self' https://fonts.gstatic.com",
+			"script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net",
+			
+			// CHANGE: Allow connections to the JSDelivr CDN for source maps.
+			"connect-src 'self' https://cdn.jsdelivr.net",
 
-    w.Header().Set("Content-Security-Policy", csp)
-    w.Header().Set("X-Frame-Options", "DENY")
-    w.Header().Set("X-Content-Type-Options", "nosniff")
-    w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-    next.ServeHTTP(w, r)
-  })
+			"frame-src 'none'",
+			"media-src 'self'",
+			"worker-src 'self'",
+		}
+		csp := strings.Join(directives, "; ")
+
+		w.Header().Set("Content-Security-Policy", csp)
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
@@ -103,6 +101,7 @@ func main() {
 
 	// Migrations
 	logger.Info("running database migrations")
+	// Reminder: If you add the password reset fields to domain.User, this will create them.
 	if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
 		logger.Error("database migration failed", "error", err,
 			"tables", []string{"users", "chats", "messages"})
@@ -182,7 +181,7 @@ func main() {
 	userService := user_services.NewUserService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber, logger)
 	authService := user_services.NewAuthService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber, logger)
 	balanceService := user_services.NewBalanceService(userRepo, logger)
-	verificationService := user_services.NewVerificationService(userRepo, smsService, logger)
+	verificationService := user_services.NewVerificationService(userRepo, smsService, authService, logger)
 	logger.Info("user services initialized successfully",
 		"services", []string{"user", "auth", "balance", "lockout", "verification"})
 
@@ -211,7 +210,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	pageHandler := handlers.NewPageHandler()
+	pageHandler := handlers.NewPageHandler(userService, chatService, adminService)
 	adminHandler := handlers.NewAdminHandler(adminService)
 	logger.Info("HTTP handlers initialized successfully")
 
@@ -243,6 +242,13 @@ func main() {
 	r.HandleFunc("/verify-sms", pageHandler.ShowVerifySMSPage).Methods("GET")
 	r.HandleFunc("/resend-sms", authHandler.ResendSMS).Methods("GET")
 
+	// CHANGE: Added routes for the password reset flow.
+	r.HandleFunc("/forgot-password", pageHandler.ShowForgotPasswordPage).Methods("GET")
+	r.HandleFunc("/forgot-password", authHandler.HandleForgotPassword).Methods("POST")
+	r.HandleFunc("/reset-password", pageHandler.ShowResetPasswordPage).Methods("GET")
+	r.HandleFunc("/reset-password", authHandler.HandleResetPassword).Methods("POST")
+
+
 	// Protected routes
 	protected := r.PathPrefix("/").Subrouter()
 	protected.Use(authMW)
@@ -253,7 +259,7 @@ func main() {
 	api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
 	api.HandleFunc("/chats", chatHandler.CreateChat).Methods("POST")
 	api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
-	api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.SendMessage).Methods("POST")
+	api.HandleFunc("/chats/{id:[0-g]+}/messages", chatHandler.SendMessage).Methods("POST")
 	api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
 	api.HandleFunc("/chats/{id:[0-9]+}/stream", chatHandler.StreamChatSSE).Methods("GET")
 
@@ -298,11 +304,8 @@ func main() {
 	initTime := time.Since(startTime)
 	logger.Info("🚀 server initialization completed",
 		"initialization_time", initTime.String(),
-		"port", port,
-		"read_timeout", "15s",
-		"write_timeout", "15s",
-		"idle_timeout", "60s")
-
+		"port", port)
+		
 	logger.Info("==================================================")
 	logger.Info("🤖 Internist AI - Medical Chat Assistant", "status", "ready")
 	logger.Info("🚀 server starting", "port", port)

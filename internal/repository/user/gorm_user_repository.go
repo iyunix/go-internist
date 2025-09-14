@@ -478,3 +478,35 @@ func (r *gormUserRepository) handleFindError(err error, user *domain.User) (*dom
     // Return generic error for security
     return nil, errors.New("database query failed")
 }
+
+// FindAllWithPaginationAndSearch provides a memory-safe, paginated, and searchable query for users.
+func (r *gormUserRepository) FindAllWithPaginationAndSearch(ctx context.Context, page, limit int, search string) ([]domain.User, int64, error) {
+	var users []domain.User
+	var total int64
+
+	// Build the base query
+	query := r.db.WithContext(ctx).Model(&domain.User{})
+
+	// Apply search filter if a search term is provided
+	if search != "" {
+		// Sanitize search term
+		searchTerm := "%" + strings.ToLower(search) + "%"
+		query = query.Where("LOWER(username) LIKE ? OR phone_number LIKE ?", searchTerm, searchTerm)
+	}
+
+	// First, count the total number of records that match the query
+	if err := query.Count(&total).Error; err != nil {
+		log.Printf("[UserRepository] Database error counting users with search: %v", err)
+		return nil, 0, errors.New("database error counting users")
+	}
+
+	// Now, apply pagination (limit and offset) to the query to fetch the actual data
+	offset := (page - 1) * limit
+	err := query.Order("id asc").Limit(limit).Offset(offset).Find(&users).Error
+	if err != nil {
+		log.Printf("[UserRepository] Database error in paginated search query: %v", err)
+		return nil, 0, errors.New("database error retrieving paginated users")
+	}
+
+	return users, total, nil
+}

@@ -655,3 +655,19 @@ func (r *gormMessageRepository) handleFindError(err error, message *domain.Messa
     // Return generic error for security
     return nil, errors.New("database query failed")
 }
+
+// DeleteByChatID performs a bulk deletion of all messages associated with a given chatID.
+func (r *gormMessageRepository) DeleteByChatID(ctx context.Context, chatID uint) error {
+	if chatID == 0 {
+		return errors.New("invalid chat ID")
+	}
+
+	result := r.db.WithContext(ctx).Where("chat_id = ?", chatID).Delete(&domain.Message{})
+	if result.Error != nil {
+		log.Printf("[MessageRepository] Database error deleting messages for chat ID %d: %v", chatID, result.Error)
+		return errors.New("database error deleting messages by chat ID")
+	}
+
+	log.Printf("[MessageRepository] Deleted %d messages for chat %d", result.RowsAffected, chatID)
+	return nil
+}

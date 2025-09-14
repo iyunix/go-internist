@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <title>Internist AI - AI Response</title>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script> <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        -webkit-print-color-adjust: exact; /* Ensures colors are printed */
+      }
+      @media print {
+        #print-button-container { display: none; }
+        body { margin: 1in; }
+      }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+<div class="max-w-4xl mx-auto p-8 bg-white shadow-lg">
+    <header class="flex justify-between items-center pb-8 border-b border-gray-200">
+        <div class="flex items-center gap-4">
+            <svg class="h-8 w-8 text-[#13a4ec]" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <path clip-rule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor" fill-rule="evenodd"></path>
+            </svg>
+            <h1 class="text-2xl font-bold text-gray-900">Internist AI</h1>
+        </div>
+        <div class="text-right">
+            <p class="text-sm text-gray-500">Generated on:</p>
+            <p id="generation-date" class="font-medium text-gray-700"></p>
+        </div>
+    </header>
+    <main class="mt-8">
+        <article id="ai-content-container" class="prose max-w-none prose-lg prose-p:text-gray-700 prose-headings:text-gray-900 prose-strong:text-gray-900">
+            </article>
+    </main>
+    <footer class="mt-12 pt-6 border-t border-gray-200">
+        <div id="print-button-container" class="text-center mb-6">
+             <button onclick="window.print()" class="bg-[#13a4ec] text-white font-bold py-2 px-4 rounded hover:bg-opacity-90">Print / Save as PDF</button>
+        </div>
+        <p class="text-xs text-gray-500 text-center">
+            <strong>Disclaimer:</strong> This information is for informational purposes only and does not constitute medical advice. Always consult with a qualified healthcare professional for any health concerns or before making any decisions related to your health or treatment.
+        </p>
+    </footer>
+</div>
+</body>
+</html>

@@ -10,44 +10,62 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/iyunix/go-internist/internal/domain" // <-- ADDED THIS IMPORT
+	"github.com/iyunix/go-internist/internal/domain"
 	"github.com/iyunix/go-internist/internal/services/admin_services"
 )
 
-// AdminHandler holds the dependencies for admin-related HTTP handlers.
 type AdminHandler struct {
 	adminService *admin_services.AdminService
 }
 
-// NewAdminHandler creates a new instance of AdminHandler.
 func NewAdminHandler(adminService *admin_services.AdminService) *AdminHandler {
 	return &AdminHandler{
 		adminService: adminService,
 	}
 }
 
-// GetAllUsersHandler handles the API request to fetch all users.
+// GetAllUsersHandler handles the API request to fetch all users with pagination and search.
 func (h *AdminHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
-	users, err := h.adminService.GetAllUsers(r.Context())
+	// CHANGE: Parse page, limit, and search query parameters from the request.
+	query := r.URL.Query()
+	
+	page, err := strconv.Atoi(query.Get("page"))
+	if err != nil || page < 1 {
+		page = 1 // Default to page 1
+	}
+
+	limit, err := strconv.Atoi(query.Get("limit"))
+	if err != nil || limit < 1 {
+		limit = 10 // Default to 10 results per page
+	}
+
+	search := query.Get("search")
+
+	// This assumes your AdminService's GetAllUsers is updated to accept these parameters.
+	users, total, err := h.adminService.GetAllUsers(r.Context(), page, limit, search)
 	if err != nil {
 		log.Printf("[AdminHandler] Error getting all users: %v", err)
 		http.Error(w, "Failed to retrieve users", http.StatusInternalServerError)
 		return
 	}
+
+	// CHANGE: Return a structured response with pagination data.
+	response := map[string]interface{}{
+		"users": users,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
+	json.NewEncoder(w).Encode(response)
 }
 
 
-// --- THE OLD AddCreditsHandler IS GONE. IT IS REPLACED BY THE THREE HANDLERS BELOW. ---
-
-
-// A struct for requests that only need a UserID.
 type userActionRequest struct {
 	UserID uint `json:"userID"`
 }
 
-// RenewSubscriptionHandler handles the API request to reset a user's balance to their plan's limit.
 func (h *AdminHandler) RenewSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 	var req userActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -65,13 +83,11 @@ func (h *AdminHandler) RenewSubscriptionHandler(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode(map[string]string{"message": "Subscription renewed successfully"})
 }
 
-// A struct for requests to change a user's plan.
 type changePlanRequest struct {
-	UserID  uint                     `json:"userID"`
+	UserID  uint                  `json:"userID"`
 	NewPlan domain.SubscriptionPlan `json:"newPlan"`
 }
 
-// ChangePlanHandler handles the API request to change a user's subscription plan.
 func (h *AdminHandler) ChangePlanHandler(w http.ResponseWriter, r *http.Request) {
 	var req changePlanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -88,25 +104,24 @@ func (h *AdminHandler) ChangePlanHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(map[string]string{"message": "User plan updated successfully"})
 }
 
-// A struct for requests to top up a user's balance.
+// CHANGE: Updated the JSON tags to match what the frontend will send.
 type topUpRequest struct {
-	UserID      uint `json:"userID"`
-	AmountToAdd int  `json:"amountToAdd"`
+	UserID uint `json:"userID"`
+	Amount int  `json:"amount"`
 }
 
-// TopUpBalanceHandler handles the API request to add bonus credits to a user.
 func (h *AdminHandler) TopUpBalanceHandler(w http.ResponseWriter, r *http.Request) {
 	var req topUpRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.AmountToAdd <= 0 {
+	if req.Amount <= 0 {
 		http.Error(w, "Amount to add must be positive", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.adminService.TopUpBalance(r.Context(), req.UserID, req.AmountToAdd); err != nil {
+	if err := h.adminService.TopUpBalance(r.Context(), req.UserID, req.Amount); err != nil {
 		log.Printf("[AdminHandler] Error topping up balance for user %d: %v", req.UserID, err)
 		http.Error(w, "Failed to top up balance", http.StatusInternalServerError)
 		return
@@ -115,46 +130,41 @@ func (h *AdminHandler) TopUpBalanceHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]string{"message": "Balance topped up successfully"})
 }
 
-
-// ExportUsersCSVHandler generates and serves a CSV file of all users.
 func (h *AdminHandler) ExportUsersCSVHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. Fetch all users from the service.
-	users, err := h.adminService.GetAllUsers(r.Context())
+	// This assumes GetAllUsers can be called without pagination/search params for a full export.
+	users, _, err := h.adminService.GetAllUsers(r.Context(), 0, 0, "") // page=0, limit=0 means "all"
 	if err != nil {
 		log.Printf("[AdminHandler] Error exporting users: %v", err)
 		http.Error(w, "Failed to export users", http.StatusInternalServerError)
 		return
 	}
 
-	// 2. Set headers to tell the browser to download the file.
 	filename := fmt.Sprintf("users_export_%s.csv", time.Now().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 
-	// 3. Create a CSV writer that writes directly to the HTTP response.
 	csvWriter := csv.NewWriter(w)
 	defer csvWriter.Flush()
 
-	// 4. Write the header row.
-	header := []string{"ID", "Username", "PhoneNumber", "CurrentBalance", "TotalBalance", "IsAdmin"}
+	header := []string{"ID", "Username", "PhoneNumber", "Status", "IsAdmin", "CurrentBalance", "TotalBalance", "Plan"}
 	if err := csvWriter.Write(header); err != nil {
 		log.Printf("[AdminHandler] Error writing CSV header: %v", err)
 		return
 	}
 
-	// 5. Loop through users and write each one as a row in the CSV.
 	for _, user := range users {
 		record := []string{
 			strconv.FormatUint(uint64(user.ID), 10),
 			user.Username,
 			user.PhoneNumber,
+			string(user.Status),
+			strconv.FormatBool(user.IsAdmin),
 			strconv.Itoa(user.CharacterBalance),
 			strconv.Itoa(user.TotalCharacterBalance),
-			strconv.FormatBool(user.IsAdmin),
+			string(user.SubscriptionPlan),
 		}
 		if err := csvWriter.Write(record); err != nil {
 			log.Printf("[AdminHandler] Error writing CSV record for user %d: %v", user.ID, err)
-			// Stop if we can no longer write to the connection.
 			return
 		}
 	}

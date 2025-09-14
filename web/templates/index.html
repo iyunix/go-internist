@@ -1,48 +1,24 @@
-{{template "layout.html" .}}
-
-{{define "styles"}}
-    <!-- Use only compiled Tailwind CSS, Google Fonts, and Material Symbols. No CDN JS script. -->
-    <link rel="stylesheet" href="/static/css/output.css" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?display=swap&family=Inter:wght@400;500;600;700;900&family=Noto+Sans:wght@400;500;700;900">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
-    <style>
-        :root {
-            --primary-50: #f0f9ff;
-            --primary-100: #e0f2fe;
-            --primary-200: #bae6fd;
-            --primary-300: #7dd3fc;
-            --primary-400: #38bdf8;
-            --primary-500: #13a4ec;
-            --primary-600: #0284c7;
-            --primary-700: #0369a1;
-            --primary-800: #075985;
-            --primary-900: #0c4a6e;
-        }
-        body {
-            font-family: 'Inter', 'Noto Sans', sans-serif;
-        }
-    </style>
-{{end}}
+{{define "title"}}Internist AI - Home{{end}}
 
 {{define "content"}}
-<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-white">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
     <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-lg">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex h-16 items-center justify-between">
                 <a href="/" class="flex items-center gap-4 text-slate-800">
-                    <svg class="h-8 w-8 text-primary-500" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                    <svg class="h-8 w-8 text-[#13a4ec]" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                         <path clip-rule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor" fill-rule="evenodd"></path>
                     </svg>
                     <h2 class="text-xl font-bold leading-tight tracking-tighter">Internist AI</h2>
                 </a>
                 <nav class="hidden items-center gap-8 md:flex">
-                    <a class="text-sm font-medium text-slate-600 hover:text-primary-500 transition-colors" href="#features">Features</a>
-                    <a class="text-sm font-medium text-slate-600 hover:text-primary-500 transition-colors" href="#benefits">Benefits</a>
-                    <a class="text-sm font-medium text-slate-600 hover:text-primary-500 transition-colors" href="#cta">Contact</a>
+                    <a class="text-sm font-medium text-slate-600 hover:text-[#13a4ec] transition-colors" href="#">Product</a>
+                    <a class="text-sm font-medium text-slate-600 hover:text-[#13a4ec] transition-colors" href="#">Solutions</a>
+                    <a class="text-sm font-medium text-slate-600 hover:text-[#13a4ec] transition-colors" href="#">Resources</a>
+                    <a class="text-sm font-medium text-slate-600 hover:text-[#13a4ec] transition-colors" href="#">Pricing</a>
                 </nav>
                 <div class="flex items-center gap-2">
-                    <a href="/register" class="flex h-10 min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md px-4 bg-primary-500 text-white text-sm font-bold leading-normal tracking-wide shadow-sm hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all">
+                    <a href="/register" class="flex h-10 min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md px-4 bg-[#13a4ec] text-white text-sm font-bold leading-normal tracking-wide shadow-sm hover:bg-[#0284c7] focus:outline-none focus:ring-2 focus:ring-[#13a4ec] focus:ring-offset-2 transition-all">
                         <span class="truncate">Get Started</span>
                     </a>
                     <a href="/login" class="hidden sm:flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md h-10 px-4 bg-slate-100 text-slate-700 text-sm font-bold leading-normal tracking-wide hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 transition-all">
@@ -52,13 +28,12 @@
             </div>
         </div>
     </header>
-
     <main class="flex-1">
         <section class="relative">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="relative flex min-h-[60vh] md:min-h-[70vh] flex-col items-center justify-center text-center">
                     <div class="absolute inset-0 overflow-hidden rounded-2xl">
-                        <div class="absolute inset-0 bg-cover bg-center" style='background-image: url("/static/img/hero-background.jpg");'></div>
+                        <div class="absolute inset-0 bg-cover bg-center" style='background-image: url("/static/images/hero-background.jpg");'></div>
                         <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent"></div>
                     </div>
                     <div class="relative z-10 flex max-w-3xl flex-col items-center gap-6">
@@ -66,153 +41,14 @@
                         <p class="text-lg font-normal leading-normal text-slate-200">
                             Internist AI provides clinicians with advanced diagnostic support, leveraging the latest medical research to enhance patient care and improve outcomes.
                         </p>
-                        <a href="/register" class="flex h-12 min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md bg-primary-500 px-6 text-base font-bold leading-normal tracking-wide text-white shadow-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all">
+                        <a href="/register" class="flex h-12 min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md bg-[#13a4ec] px-6 text-base font-bold leading-normal tracking-wide text-white shadow-lg hover:bg-[#0284c7] focus:outline-none focus:ring-2 focus:ring-[#13a4ec] focus:ring-offset-2 focus:ring-offset-slate-900 transition-all">
                             <span class="truncate">Request a Demo</span>
                         </a>
                     </div>
                 </div>
             </div>
         </section>
-
-        <section id="features" class="py-16 sm:py-24">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="mx-auto max-w-3xl text-center">
-                    <h2 class="text-3xl font-bold tracking-tighter text-slate-900 sm:text-4xl">Key Features</h2>
-                    <p class="mt-4 text-lg text-slate-600">Internist AI offers a suite of powerful tools designed to support clinicians in their daily practice.</p>
-                </div>
-                <div class="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-                    <div class="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary-500">
-                            <span class="material-symbols-outlined">science</span>
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <h3 class="text-lg font-semibold text-slate-900">Advanced Diagnostic Support</h3>
-                            <p class="text-sm text-slate-600">Leverage AI-powered insights for accurate and timely diagnoses, reducing diagnostic errors and improving patient outcomes.</p>
-                        </div>
-                    </div>
-                    <div class="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary-500">
-                            <span class="material-symbols-outlined">analytics</span>
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <h3 class="text-lg font-semibold text-slate-900">Real-Time Data Analysis</h3>
-                            <p class="text-sm text-slate-600">Analyze patient data in real-time to identify potential risks and optimize treatment plans, ensuring personalized care.</p>
-                        </div>
-                    </div>
-                    <div class="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 text-primary-500">
-                            <span class="material-symbols-outlined">security</span>
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <h3 class="text-lg font-semibold text-slate-900">Enhanced Security and Privacy</h3>
-                            <p class="text-sm text-slate-600">Internist AI adheres to the highest standards of data security and patient privacy, ensuring compliance with regulations.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="benefits" class="bg-slate-50 py-16 sm:py-24">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="mx-auto max-w-3xl text-center">
-                    <h2 class="text-3xl font-bold tracking-tighter text-slate-900 sm:text-4xl">Benefits for Your Practice</h2>
-                    <p class="mt-4 text-lg text-slate-600">Experience the transformative impact of Internist AI on your practice and patient care.</p>
-                </div>
-                <div class="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3">
-                    <div class="flex flex-col gap-4">
-                        <div class="aspect-h-2 aspect-w-3 w-full overflow-hidden rounded-xl">
-                            <!-- UNCOMMENT if file exists: -->
-                            <!-- <img alt="Doctor reviewing patient chart" class="h-full w-full object-cover" src="/static/img/benefit-1.jpg"/> -->
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Improved Patient Outcomes</h3>
-                            <p class="mt-1 text-sm text-slate-600">Achieve better patient outcomes through more accurate diagnoses and personalized treatment plans.</p>
-                        </div>
-                    </div>
-                    <div class="flex flex-col gap-4">
-                        <div class="aspect-h-2 aspect-w-3 w-full overflow-hidden rounded-xl">
-                            <!-- UNCOMMENT if file exists: -->
-                            <!-- <img alt="Healthcare professionals collaborating" class="h-full w-full object-cover" src="/static/img/benefit-2.jpg"/> -->
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Increased Efficiency</h3>
-                            <p class="mt-1 text-sm text-slate-600">Streamline workflows and reduce administrative burden, allowing clinicians to focus on patient care.</p>
-                        </div>
-                    </div>
-                    <div class="flex flex-col gap-4">
-                        <div class="aspect-h-2 aspect-w-3 w-full overflow-hidden rounded-xl">
-                            <!-- UNCOMMENT if file exists: -->
-                            <!-- <img alt="Surgeon in an operating room" class="h-full w-full object-cover" src="/static/img/benefit-3.jpg"/> -->
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Enhanced Clinical Decision-Making</h3>
-                            <p class="mt-1 text-sm text-slate-600">Make informed decisions with access to the latest medical research and AI-powered insights.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="cta" class="bg-white py-16 sm:py-24">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="mx-auto max-w-3xl text-center">
-                    <h2 class="text-3xl font-bold tracking-tighter text-slate-900 sm:text-4xl">Transform Your Practice with Internist AI</h2>
-                    <p class="mt-4 text-lg text-slate-600">Join the growing community of healthcare professionals who are leveraging the power of AI to improve patient care.</p>
-                    <div class="mt-8 flex justify-center">
-                        <a href="/register" class="flex h-12 min-w-[84px] max-w-[480px] grow cursor-pointer items-center justify-center overflow-hidden rounded-md bg-primary-500 px-6 text-base font-bold leading-normal tracking-wide text-white shadow-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all">
-                            <span class="truncate">Get Started Now</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <footer class="bg-slate-100">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8">
-                <div class="col-span-2 md:col-span-4 lg:col-span-2">
-                    <div class="flex items-center gap-3 text-slate-800">
-                        <svg class="h-8 w-8 text-primary-500" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                            <path clip-rule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor" fill-rule="evenodd"></path>
-                        </svg>
-                        <h2 class="text-xl font-bold leading-tight tracking-tighter">Internist AI</h2>
-                    </div>
-                    <p class="mt-4 text-sm text-slate-600">Evidence-based AI for healthcare.</p>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-900">Product</h3>
-                    <ul class="mt-4 space-y-2">
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="#">Features</a></li>
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="#">Pricing</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-900">Company</h3>
-                    <ul class="mt-4 space-y-2">
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="#">About Us</a></li>
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="#">Contact</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-900">Resources</h3>
-                    <ul class="mt-4 space-y-2">
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="#">Blog</a></li>
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="#">Case Studies</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-900">Legal</h3>
-                    <ul class="mt-4 space-y-2">
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="/privacy">Privacy Policy</a></li>
-                        <li><a class="text-sm text-slate-600 hover:text-primary-500 transition-colors" href="/terms">Terms of Service</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="mt-8 border-t border-slate-200 pt-8 text-center text-sm text-slate-500">
-                <p>&copy; 2025 Internist AI. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
+        </main>
+        {{ template "_app_footer.html" . }}
 </div>
 {{end}}

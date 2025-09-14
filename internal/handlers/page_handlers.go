@@ -2,114 +2,224 @@
 package handlers
 
 import (
-    "html/template"
-    "log"
-    "net/http"
-    "sync"
+	"bytes"
+	"html/template"
+	"log"
+	"net/http"
+	"path/filepath" // <-- ADD THIS IMPORT
+	"strconv"
+	"sync"
 
-    "github.com/iyunix/go-internist/internal/middleware"
+	"github.com/iyunix/go-internist/internal/domain"
+	"github.com/iyunix/go-internist/internal/middleware"
+	"github.com/iyunix/go-internist/internal/services"
+	"github.com/iyunix/go-internist/internal/services/admin_services"
+	"github.com/iyunix/go-internist/internal/services/user_services"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/renderer/html"
 )
 
-// Template cache to avoid parsing templates on every request
 var (
-    templateCache     map[string]*template.Template
-    templateCacheOnce sync.Once
+	templates map[string]*template.Template
+	once      sync.Once
 )
 
-// loadTemplateCache uses ParseFiles ONCE per page to ensure block overrides work.
-// Each page template + layout.html is parsed as a single set. Blocks work as expected.
-func loadTemplateCache() {
-    templateCache = make(map[string]*template.Template)
-
-    templates := []string{
-        "index.html",
-        "login.html",
-        "register.html",
-        "chat.html",
-        "error.html",
-        "verify_sms.html",
-        "admin.html",
-    }
-
-    for _, tmpl := range templates {
-        files := []string{"web/templates/layout.html", "web/templates/" + tmpl}
-        ts, err := template.ParseFiles(files...)
-        if err != nil {
-            log.Fatalf("Error parsing templates for %s: %v", tmpl, err)
-        }
-        templateCache[tmpl] = ts
-    }
+var funcMap = template.FuncMap{
+	"subtract": func(a, b int) int {
+		return a - b
+	},
+	"percentage": func(a, b int) float64 {
+		if b == 0 { return 0 }
+		return (float64(a) / float64(b)) * 100
+	},
 }
 
-// renderTemplate uses the cached template set, injecting CSRF and rendering with correct block overrides.
-func renderTemplate(w http.ResponseWriter, tmpl string, data map[string]interface{}) {
-    templateCacheOnce.Do(loadTemplateCache)
-    if data == nil {
-        data = make(map[string]interface{})
-    }
-    data["CSRFToken"] = generateCSRFToken()
-
-    t, ok := templateCache[tmpl]
-    if !ok {
-        log.Printf("Template %s not found in cache", tmpl)
-        http.Error(w, "Template not found", http.StatusInternalServerError)
-        return
-    }
-
-    // Always execute layout.html so block overrides work from the child template.
-    err := t.ExecuteTemplate(w, "layout.html", data)
-    if err != nil {
-        log.Printf("Template render error for %s: %v", tmpl, err)
-        http.Error(w, "Error rendering page", http.StatusInternalServerError)
-    }
+type RenderedMessage struct {
+	domain.Message
+	RenderedContent template.HTML
 }
 
-// Dummy CSRF token generator (replace with real implementation as needed).
-func generateCSRFToken() string {
-    return "csrf-token-placeholder"
+func loadTemplates() {
+	const templateDir = "web/templates"
+	const layoutFile = "layout.html"
+	const partialsDir = "web/templates/partials"
+	templates = make(map[string]*template.Template)
+
+	partials, err := filepath.Glob(filepath.Join(partialsDir, "*.html"))
+	if err != nil {
+		log.Printf("Warning: could not find partial templates: %v", err)
+	}
+
+	pages, err := filepath.Glob(filepath.Join(templateDir, "*.html"))
+	if err != nil {
+		log.Fatalf("Error finding page templates: %v", err)
+	}
+	if len(pages) == 0 {
+		log.Fatalf("No page templates found in %s directory", templateDir)
+	}
+	
+	layoutPath := filepath.Join(templateDir, layoutFile)
+
+	for _, pagePath := range pages {
+		filename := filepath.Base(pagePath)
+		if filename == layoutFile {
+			continue
+		}
+		filesToParse := []string{pagePath, layoutPath}
+		filesToParse = append(filesToParse, partials...)
+
+		ts, err := template.New(filename).Funcs(funcMap).ParseFiles(filesToParse...)
+		if err != nil {
+			log.Fatalf("Error parsing template %s: %v", filename, err)
+		}
+		templates[filename] = ts
+	}
+	log.Printf("Successfully loaded and cached %d page templates with %d partials.", len(templates), len(partials))
 }
 
-type PageHandler struct{}
 
-func NewPageHandler() *PageHandler {
-    return &PageHandler{}
+func RenderTemplate(w http.ResponseWriter, tmplName string, data map[string]interface{}) {
+	once.Do(loadTemplates)
+	t, ok := templates[tmplName]
+	if !ok {
+		http.Error(w, "The template "+tmplName+" does not exist.", http.StatusInternalServerError)
+		return
+	}
+	err := t.ExecuteTemplate(w, "layout.html", data)
+	if err != nil {
+		log.Printf("Error executing template %s: %v", tmplName, err)
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+	}
 }
 
+type PageHandler struct {
+	UserService  *user_services.UserService
+	ChatService  *services.ChatService
+	AdminService *admin_services.AdminService
+}
+
+func NewPageHandler(us *user_services.UserService, cs *services.ChatService, as *admin_services.AdminService) *PageHandler {
+	return &PageHandler{
+		UserService:  us,
+		ChatService:  cs,
+		AdminService: as,
+	}
+}
+
+// ... (The rest of your handler functions remain correct and unchanged) ...
 func (h *PageHandler) ShowIndexPage(w http.ResponseWriter, r *http.Request) {
-    renderTemplate(w, "index.html", nil)
+	RenderTemplate(w, "index.html", nil)
 }
 
 func (h *PageHandler) ShowLoginPage(w http.ResponseWriter, r *http.Request) {
-    renderTemplate(w, "login.html", nil)
+	data := map[string]interface{}{
+		"Verified":     r.URL.Query().Get("verified") == "true",
+		"Error":        r.URL.Query().Get("error"),
+		"ResetSuccess": r.URL.Query().Get("reset") == "success",
+	}
+	RenderTemplate(w, "login.html", data)
 }
 
 func (h *PageHandler) ShowRegisterPage(w http.ResponseWriter, r *http.Request) {
-    renderTemplate(w, "register.html", nil)
+	RenderTemplate(w, "register.html", nil)
 }
 
 func (h *PageHandler) ShowVerifySMSPage(w http.ResponseWriter, r *http.Request) {
-    phone := r.URL.Query().Get("phone")
-    data := map[string]interface{}{"PhoneNumber": phone}
-    renderTemplate(w, "verify_sms.html", data)
+	phone := r.URL.Query().Get("phone")
+	data := map[string]interface{}{
+		"PhoneNumber": phone,
+	}
+	RenderTemplate(w, "verify_sms.html", data)
+}
+
+func (h *PageHandler) ShowForgotPasswordPage(w http.ResponseWriter, r *http.Request) {
+	RenderTemplate(w, "forgot_password.html", nil)
+}
+
+func (h *PageHandler) ShowResetPasswordPage(w http.ResponseWriter, r *http.Request) {
+	data := map[string]interface{}{
+		"Phone": r.URL.Query().Get("phone"),
+		"Code":  r.URL.Query().Get("code"),
+		"Error": r.URL.Query().Get("error"),
+	}
+	RenderTemplate(w, "reset_password.html", data)
 }
 
 func (h *PageHandler) ShowAdminPage(w http.ResponseWriter, r *http.Request) {
-    renderTemplate(w, "admin.html", nil)
+	users, _, err := h.AdminService.GetAllUsers(r.Context(), 1, 10, "")
+	if err != nil {
+		log.Printf("Error fetching users for admin page: %v", err)
+		users = []domain.User{}
+	}
+	data := map[string]interface{}{
+		"Users": users,
+	}
+	RenderTemplate(w, "admin.html", data)
 }
 
 func (h *PageHandler) ShowChatPage(w http.ResponseWriter, r *http.Request) {
-    userID, _ := r.Context().Value(middleware.UserIDKey).(uint)
-    data := map[string]interface{}{
-        "UserID": userID,
-    }
-    renderTemplate(w, "chat.html", data)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	user, err := h.UserService.GetUserByID(r.Context(), userID)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=user_not_found", http.StatusSeeOther)
+		return
+	}
+	chats, err := h.ChatService.GetUserChats(r.Context(), userID)
+	if err != nil {
+		log.Printf("Error fetching chats for user %d: %v", userID, err)
+		chats = []domain.Chat{}
+	}
+	activeChatIDStr := r.URL.Query().Get("id")
+	var activeChatID uint64
+	var renderedMessages []RenderedMessage
+	if activeChatIDStr != "" {
+		activeChatID, _ = strconv.ParseUint(activeChatIDStr, 10, 64)
+		messages, err := h.ChatService.GetChatMessages(r.Context(), userID, uint(activeChatID))
+		if err != nil {
+			log.Printf("Error fetching messages for chat %d: %v", activeChatID, err)
+		} else {
+			mdParser := goldmark.New(
+				goldmark.WithExtensions(extension.GFM),
+				goldmark.WithRendererOptions(html.WithHardWraps()),
+			)
+			for _, msg := range messages {
+				var buf bytes.Buffer
+				if msg.MessageType == "assistant" {
+					if err := mdParser.Convert([]byte(msg.Content), &buf); err == nil {
+						renderedMessages = append(renderedMessages, RenderedMessage{
+							Message:         msg,
+							RenderedContent: template.HTML(buf.String()),
+						})
+					}
+				} else {
+					renderedMessages = append(renderedMessages, RenderedMessage{
+						Message:         msg,
+						RenderedContent: template.HTML(template.HTMLEscapeString(msg.Content)),
+					})
+				}
+			}
+		}
+	}
+	data := map[string]interface{}{
+		"User":         user,
+		"Chats":        chats,
+		"Messages":     renderedMessages,
+		"ActiveChatID": uint(activeChatID),
+	}
+	RenderTemplate(w, "chat.html", data)
 }
 
 func (h *PageHandler) ShowErrorPage(w http.ResponseWriter, code, message, description string) {
-    data := map[string]interface{}{
-        "Code":        code,
-        "Message":     message,
-        "Description": description,
-    }
-    renderTemplate(w, "error.html", data)
+	w.WriteHeader(http.StatusNotFound)
+	data := map[string]interface{}{
+		"Code":        code,
+		"Message":     message,
+		"Description": description,
+	}
+	RenderTemplate(w, "error.html", data)
 }
