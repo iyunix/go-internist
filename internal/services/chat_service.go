@@ -13,11 +13,11 @@ import (
 )
 
 type ChatService struct {
-	config          *chatservice.Config
-	chatRepo        chat.ChatRepository
-	messageRepo     message.MessageRepository
-	streamService   *chatservice.StreamingService
-	logger          Logger
+	config        *chatservice.Config
+	chatRepo      chat.ChatRepository
+	messageRepo   message.MessageRepository
+	streamService *chatservice.StreamingService
+	logger        Logger
 }
 
 func NewChatService(
@@ -30,7 +30,6 @@ func NewChatService(
 	if chatRepo == nil || messageRepo == nil || aiService == nil || pineconeService == nil {
 		return nil, errors.New("all dependencies are required for ChatService")
 	}
-
 	config := chatservice.DefaultConfig()
 	if retrievalTopK > 0 {
 		config.RetrievalTopK = retrievalTopK
@@ -38,7 +37,6 @@ func NewChatService(
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	
 	logger := NewLogger("chat_service")
 	ragService := chatservice.NewRAGService(config, logger)
 	sourceExtractor := chatservice.NewSourceExtractor(config, logger)
@@ -46,7 +44,6 @@ func NewChatService(
 		config, chatRepo, messageRepo, aiService, pineconeService,
 		ragService, sourceExtractor, logger,
 	)
-
 	return &ChatService{
 		config:        config,
 		chatRepo:      chatRepo,
@@ -56,14 +53,17 @@ func NewChatService(
 	}, nil
 }
 
+// CHANGE 1: Add the new onStatus parameter to the function signature
 func (s *ChatService) StreamChatMessageWithSources(
 	ctx context.Context,
 	userID, chatID uint,
 	prompt string,
 	onDelta func(string) error,
 	onSources func([]string),
+	onStatus func(status string, message string), // <-- ADD THIS
 ) error {
-	return s.streamService.StreamChatResponse(ctx, userID, chatID, prompt, onDelta, onSources)
+	// CHANGE 2: Pass the new onStatus parameter down to the streaming service
+	return s.streamService.StreamChatResponse(ctx, userID, chatID, prompt, onDelta, onSources, onStatus)
 }
 
 func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string) (*domain.Chat, error) {
@@ -97,19 +97,14 @@ func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error
 	return s.chatRepo.Delete(ctx, chatID, userID)
 }
 
-// GetUserChats is a convenience function that gets the first page of chats.
 func (s *ChatService) GetUserChats(ctx context.Context, userID uint) ([]domain.Chat, error) {
-	// This now calls the new paginated function with default values.
 	chats, _, err := s.GetUserChatsWithPagination(ctx, userID, 100, 0)
 	return chats, err
 }
 
-// --- THIS IS THE NEW FUNCTION THAT FIXES THE COMPILE ERROR ---
-// GetUserChatsWithPagination fetches chats for a user with pagination.
 func (s *ChatService) GetUserChatsWithPagination(ctx context.Context, userID uint, limit, offset int) ([]domain.Chat, int64, error) {
 	return s.chatRepo.FindByUserIDWithPagination(ctx, userID, limit, offset)
 }
-
 
 func (s *ChatService) SaveMessage(ctx context.Context, userID, chatID uint, content, messageType string) (*domain.Message, error) {
 	chatRecord, err := s.chatRepo.FindByID(ctx, chatID)

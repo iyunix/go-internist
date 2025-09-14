@@ -166,9 +166,9 @@ func (h *ChatHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
     log.Printf("[ChatHandler] Successfully created chat %d for user %d", chat.ID, userID)
 }
 
-// StreamChatSSE handles medical AI chat streaming with enhanced error handling and monitoring
+// StreamChatSSE handles the full RAG and streaming pipeline, including sending status updates.
 func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
-	// Enhanced user validation
+	// --- 1. Initial Validation & Setup ---
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uint)
 	if !ok || userID == 0 {
 		log.Printf("[ChatHandler] Invalid user ID in StreamChatSSE")
@@ -176,223 +176,135 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Production-ready chat ID extraction and validation
 	vars := mux.Vars(r)
 	idStr, ok := vars["id"]
 	if !ok {
 		http.Error(w, "Missing chat id in URL", http.StatusBadRequest)
 		return
 	}
-
 	id64, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil || id64 == 0 {
-		log.Printf("[ChatHandler] Invalid chat ID format: %s", idStr)
 		http.Error(w, "Invalid chat id", http.StatusBadRequest)
 		return
 	}
 	chatID := uint(id64)
 
-	// Enhanced prompt validation for medical AI
 	prompt := r.URL.Query().Get("q")
 	if err := h.validateMedicalPrompt(prompt); err != nil {
-		log.Printf("[ChatHandler] Medical prompt validation failed: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Production-ready balance checking with detailed logging
-	canAsk, chargeAmount, err := h.UserService.CanUserAskQuestion(r.Context(), userID, len(prompt))
+	// --- 2. Balance Check & Deduction ---
+	canAsk, _, err := h.UserService.CanUserAskQuestion(r.Context(), userID, len(prompt))
 	if err != nil {
-		log.Printf("[ChatHandler] Error checking user balance for user %d: %v", userID, err)
 		http.Error(w, "Error checking balance", http.StatusInternalServerError)
 		return
 	}
-
 	if !canAsk {
-		log.Printf("[ChatHandler] Insufficient balance for user %d, needs %d characters", userID, chargeAmount)
-		http.Error(w, fmt.Sprintf("Insufficient character balance. Need %d characters", chargeAmount), http.StatusPaymentRequired)
+		http.Error(w, "Insufficient character balance.", http.StatusPaymentRequired)
 		return
 	}
-
-	// Enhanced character deduction with transaction logging
 	actualCharge, err := h.UserService.DeductCharactersForQuestion(r.Context(), userID, len(prompt))
 	if err != nil {
-		log.Printf("[ChatHandler] Error deducting characters for user %d: %v", userID, err)
 		http.Error(w, "Error processing payment", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("[ChatHandler] User %d charged %d characters", userID, actualCharge)
 
-	log.Printf("[ChatHandler] Medical AI consultation: User %d charged %d characters for question length %d", userID, actualCharge, len(prompt))
-
-	// Production-ready SSE headers with security enhancements
+	// --- 3. SSE Headers and Flusher Setup ---
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
-
-	// Enhanced flusher validation
+	
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		log.Printf("[ChatHandler] Streaming unsupported for user %d", userID)
-		http.Error(w, "Streaming unsupported on this connection", http.StatusInternalServerError)
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
 		return
 	}
 
-	// Production-ready context management
-	done := r.Context().Done()
-	hb := time.NewTicker(15 * time.Second)
-	defer hb.Stop()
-
-	// Enhanced heartbeat with monitoring
-	go func() {
-		for {
-			select {
-			case <-hb.C:
-				fmt.Fprint(w, ": ping\n\n")
-				flusher.Flush()
-			case <-done:
-				// This log is now handled by the main function's final log message
-				// log.Printf("[ChatHandler] Stream context cancelled for user %d", userID)
-				return
-			}
-		}
-	}()
-
-	// Medical AI streaming variables
-	var documentSources []string
+	// --- 4. Define Callbacks for the Service ---
 	var sourcesMutex sync.Mutex
-	var tokenBuffer []string
-	bufferSize := 0
-	const maxBufferSize = 100
-	const maxTokens = 10
-
-	// --- CORRECTED FLUSHBUFFER FUNCTION ---
-	flushBuffer := func() {
-		if len(tokenBuffer) == 0 {
-			return
+	var documentSources []string
+	
+	// This callback handles the new status updates
+	onStatus := func(status, message string) {
+		payload := map[string]string{
+			"status":  status,
+			"message": message,
 		}
-		chunk := strings.Join(tokenBuffer, "")
-
-		// Create a JSON payload to wrap the text chunk.
-		// This prevents newlines in the AI's response from breaking the SSE format.
-		payload := map[string]string{"content": chunk}
-		jsonPayload, err := json.Marshal(payload)
-		if err != nil {
-			log.Printf("[ChatHandler] Error marshalling stream data: %v", err)
-			return
+		if b, err := json.Marshal(payload); err == nil {
+			fmt.Fprintf(w, "event: status\ndata: %s\n\n", b)
+			flusher.Flush()
 		}
-
-		// Send the JSON payload as the data for the event.
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", jsonPayload); err != nil {
-			log.Printf("[ChatHandler] Error writing stream data: %v", err)
-			return
-		}
-
-		flusher.Flush()
-		tokenBuffer = tokenBuffer[:0]
-		bufferSize = 0
 	}
 
-	// Enhanced token handling for medical AI responses
-	onDelta := func(token string) error {
-		select {
-		case <-done:
-			return fmt.Errorf("stream cancelled")
-		default:
-		}
-
-		tokenBuffer = append(tokenBuffer, token)
-		bufferSize += len(token)
-
-		// Medical AI optimized flushing conditions
-		if strings.ContainsAny(token, ".!?\n;:") || bufferSize >= maxBufferSize || len(tokenBuffer) >= maxTokens {
-			flushBuffer()
-		}
-		return nil
-	}
-
-	// Enhanced medical source handling
 	onSources := func(sources []string) {
 		sourcesMutex.Lock()
+		defer sourcesMutex.Unlock()
 		documentSources = sources
-		sourcesMutex.Unlock()
-
-		if len(sources) > 0 {
-			payload := map[string]interface{}{
-				"type":      "medical_sources",
-				"sources":   sources,
-				"timestamp": time.Now().Unix(),
+		// You could optionally send an initial 'sources found' event here
+	}
+	
+	onDelta := func(token string) error {
+		select {
+		case <-r.Context().Done():
+			return fmt.Errorf("client disconnected")
+		default:
+			payload := map[string]string{"content": token}
+			jsonPayload, err := json.Marshal(payload)
+			if err != nil {
+				return nil // Don't kill the stream for a single bad token
 			}
-
-			if b, err := json.Marshal(payload); err == nil {
-				fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", b)
-				flusher.Flush()
-				log.Printf("[ChatHandler] Sent %d medical sources for user %d", len(sources), userID)
-			}
+			fmt.Fprintf(w, "data: %s\n\n", jsonPayload)
+			flusher.Flush()
+			return nil
 		}
 	}
 
-	// Production-ready streaming with timeout and monitoring
+	// --- 5. Call the Streaming Service ---
 	streamCtx, streamCancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer streamCancel()
 
 	startTime := time.Now()
-	if err := h.ChatService.StreamChatMessageWithSources(streamCtx, userID, chatID, prompt, onDelta, onSources); err != nil {
-		log.Printf("[ChatHandler] Medical AI streaming error for user %d chat %d after %v: %v", userID, chatID, time.Since(startTime), err)
-
-		errorPayload := map[string]interface{}{
-			"type":  "error",
-			"error": "Medical AI service temporarily unavailable",
-		}
-		if b, err := json.Marshal(errorPayload); err == nil {
-			fmt.Fprintf(w, "event: error\ndata: %s\n\n", b)
-			flusher.Flush()
-		}
+	err = h.ChatService.StreamChatMessageWithSources(streamCtx, userID, chatID, prompt, onDelta, onSources, onStatus)
+	
+	// --- 6. Handle Stream Completion ---
+	if err != nil {
+		log.Printf("[ChatHandler] Streaming error for user %d: %v", userID, err)
+		errorPayload, _ := json.Marshal(map[string]string{"error": "An error occurred during the stream."})
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errorPayload)
+		flusher.Flush()
 		return
 	}
 
-	// Final buffer flush
-	flushBuffer()
-
-	// Final metadata and completion events...
+	// Send final metadata event with sources
 	sourcesMutex.Lock()
 	if len(documentSources) > 0 {
-		final := map[string]interface{}{
-			"type":           "final_medical_sources",
-			"sources":        documentSources,
-			"responseTime":   time.Since(startTime).Milliseconds(),
-			"sourceCount":    len(documentSources),
-			"consultationId": chatID,
-		}
-		if b, err := json.Marshal(final); err == nil {
-			fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", b)
-			flusher.Flush()
-		}
+		finalSourcesPayload, _ := json.Marshal(map[string]interface{}{"type": "final_sources", "sources": documentSources})
+		fmt.Fprintf(w, "event: metadata\ndata: %s\n\n", finalSourcesPayload)
 	}
 	sourcesMutex.Unlock()
 
-	completionPayload := map[string]interface{}{
-		"type":         "consultation_complete",
+	// Send a completion event
+	completionPayload, _ := json.Marshal(map[string]interface{}{
+		"type":         "complete",
 		"responseTime": time.Since(startTime).Milliseconds(),
 		"chargeAmount": actualCharge,
-	}
-	if b, err := json.Marshal(completionPayload); err == nil {
-		fmt.Fprintf(w, "event: complete\ndata: %s\n\n", b)
-		flusher.Flush()
-	}
-
-	// Signal the end of the stream to the client.
-	fmt.Fprintf(w, "event: done\ndata: \n\n")
+	})
+	fmt.Fprintf(w, "event: complete\ndata: %s\n\n", completionPayload)
 	flusher.Flush()
 
-	log.Printf("[ChatHandler] Medical AI consultation completed for user %d in %v", userID, time.Since(startTime))
+	// Signal the absolute end of the stream to the client
+	fmt.Fprintf(w, "event: done\ndata: {\"message\": \"Stream complete\"}\n\n")
+	flusher.Flush()
+	
+	log.Printf("[ChatHandler] Stream for user %d completed in %v", userID, time.Since(startTime))
 
-	// --- FINAL BLOCKING FIX ---
-	// Block here until the client disconnects, preventing premature connection reset.
+	// Block until the client disconnects to ensure all messages are sent
 	<-r.Context().Done()
-	log.Printf("[ChatHandler] Client has disconnected, stream for user %d is now fully closed.", userID)
+	log.Printf("[ChatHandler] Client for user %d has disconnected.", userID)
 }
 
 
