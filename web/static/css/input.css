@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Comprehensive Markdown Styles --- */
+.message-bubble h1, .message-bubble h2, .message-bubble h3, .message-bubble h4 {
+    @apply font-bold text-gray-800;
+}
+.message-bubble h1 { @apply text-2xl mb-4 mt-5 border-b pb-2; }
+.message-bubble h2 { @apply text-xl mb-3 mt-4 border-b pb-2; }
+.message-bubble h3 { @apply text-lg mb-2 mt-3; }
+.message-bubble h4 { @apply text-base mb-2 mt-2; }
+
+.message-bubble p { @apply mb-4 leading-relaxed; }
+
+.message-bubble ul, .message-bubble ol { @apply list-inside pl-5 mb-4 space-y-2; }
+.message-bubble ul { @apply list-disc; }
+.message-bubble ol { @apply list-decimal; }
+.message-bubble li::marker { @apply text-gray-500; }
+
+.message-bubble blockquote { @apply border-l-4 border-gray-300 pl-4 py-2 my-4 bg-gray-50 text-gray-600 italic; }
+
+.message-bubble code { @apply bg-gray-200 text-gray-800 rounded px-1.5 py-1 text-sm font-mono; }
+.message-bubble pre { @apply bg-gray-800 text-white rounded-lg p-4 my-4 overflow-x-auto; }
+.message-bubble pre code { @apply bg-transparent text-white p-0; }
+
+.message-bubble a { @apply text-blue-600 underline hover:text-blue-800; }
+
+.message-bubble hr { @apply my-6 border-gray-200; }
+
+.message-bubble table { @apply w-full border-collapse text-sm my-4; }
+.message-bubble th, .message-bubble td { @apply border border-gray-300 p-2 text-left align-top; }
+.message-bubble th { @apply bg-gray-100 font-semibold text-gray-700; }
+.message-bubble tr:nth-child(even) { @apply bg-gray-50/50; }
+
+/* --- Footnote Styles --- */
+.footnotes { @apply mt-6 border-t border-gray-200 pt-4; }
+.footnotes ol { @apply pl-5 space-y-2; }
+.footnotes li { @apply text-sm text-gray-600; }
+.footnote-ref, .footnote-backref { @apply text-[var(--primary-color)] no-underline hover:underline; }

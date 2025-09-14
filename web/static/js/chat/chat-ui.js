@@ -32,6 +32,12 @@ export class ChatUI {
                 ? 'rounded-tr-none bg-[var(--primary-color)] text-white'
                 : 'rounded-tl-none bg-gray-100 text-[var(--text-primary)]'
         }`;
+        messageBubble.className = `message-bubble mt-1 rounded-lg p-3 text-base text-left ${
+        role === 'user'
+            ? 'rounded-tr-none bg-[var(--primary-color)] text-white'
+            : 'rounded-tl-none bg-gray-100 text-[var(--text-primary)]'
+        }`;
+
         
         if (role === "assistant") {
             this.lastAssistantMessageBubble = messageBubble;
