@@ -1,13 +1,9 @@
 // File: web/static/js/admin.js
-// REWRITTEN FOR SUBSCRIPTION PLAN MANAGEMENT
+// REWRITTEN to match the new Tailwind CSS admin panel design.
 
 document.addEventListener('DOMContentLoaded', () => {
     const userTableBody = document.getElementById('user-table-body');
     const searchInput = document.getElementById('user-search-input');
-    
-    // For simplicity, we define the available plans here.
-    // In a more advanced system, you might fetch these from an API.
-    const availablePlans = ['basic', 'pro', 'premium'];
 
     if (!userTableBody || !searchInput) {
         console.error('Required admin elements not found!');
@@ -15,129 +11,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Fetches all users from the API and renders them in the table.
+     * Fetches all users from the API.
      */
-    async function fetchAndRenderUsers() {
+    async function fetchUsers() {
         try {
             const response = await fetch('/api/admin/users');
-            if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
-            const users = await response.json();
-            renderUserTable(users);
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            // Assuming the API response is { "users": [...] }
+            const data = await response.json();
+            return data.users || data || [];
         } catch (error) {
             console.error('Error fetching users:', error);
-            userTableBody.innerHTML = `<tr><td colspan="7" class="error-message">Error loading users.</td></tr>`;
+            userTableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Error loading users. Please try again.</td></tr>`;
+            return [];
         }
     }
 
     /**
-     * Renders the user data into the HTML table with new action controls.
-     * @param {Array} users - An array of user objects from the API.
+     * Renders user data into the new Tailwind-styled table.
+     * @param {Array} users - An array of user objects.
      */
     function renderUserTable(users) {
-        userTableBody.innerHTML = '';
-        if (!users || users.length === 0) {
-            userTableBody.innerHTML = `<tr><td colspan="7">No users found.</td></tr>`;
+        userTableBody.innerHTML = ''; // Clear previous content
+        if (users.length === 0) {
+            userTableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No users found.</td></tr>`;
             return;
         }
 
         users.forEach(user => {
             const row = document.createElement('tr');
-            
-            // Generate the <option> elements for the plan selector dropdown
-            const planOptions = availablePlans.map(plan => 
-                `<option value="${plan}" ${user.subscription_plan === plan ? 'selected' : ''}>
-                    ${plan.charAt(0).toUpperCase() + plan.slice(1)}
-                </option>`
-            ).join('');
+            // Add search terms to the row for easier filtering
+            row.setAttribute('data-search-terms', `${user.Username.toLowerCase()} ${user.PhoneNumber.toLowerCase()}`);
 
-            const isAdminBadge = user.IsAdmin ? '<span class="status-badge admin">Yes</span>' : '<span class="status-badge user">No</span>';
+            const roleBadge = user.IsAdmin
+                ? `<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Admin</span>`
+                : `<span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">User</span>`;
 
-            // This HTML is new and more complex, with separate controls for each action.
             row.innerHTML = `
-                <td>${user.id}</td>
-                <td>${user.username}</td>
-                <td>${user.phone_number}</td>
-                <td>${user.character_balance.toLocaleString()}</td>
-                <td>${user.total_character_balance.toLocaleString()}</td>
-                <td>${isAdminBadge}</td>
-                <td class="actions-column">
-                    <div class="action-group plan-changer" data-user-id="${user.id}">
-                        <select class="plan-select">${planOptions}</select>
-                        <button class="renew-btn">Renew</button>
+                <td class="whitespace-nowrap px-6 py-4">
+                    <div class="text-sm font-medium text-gray-900">${user.Username}</div>
+                    <div class="text-sm text-gray-500">${user.PhoneNumber}</div>
+                </td>
+                <td class="whitespace-nowrap px-6 py-4">
+                    <div class="text-sm text-gray-900">${user.Balance.toLocaleString()} / <span class="text-gray-500">${user.TotalBalance.toLocaleString()}</span></div>
+                </td>
+                <td class="whitespace-nowrap px-6 py-4 text-sm">${roleBadge}</td>
+                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                    <div class="action-container" data-user-id="${user.ID}">
+                        <a href="#" class="add-credits-link text-primary-600 hover:text-primary-900">Add Credits</a>
+                        <form class="top-up-form hidden flex items-center gap-2">
+                            <input type="number" class="credits-input block w-24 rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm" placeholder="Amount" min="1" required>
+                            <button type="submit" class="rounded bg-primary-600 px-2 py-1 text-xs font-semibold text-white shadow-sm hover:bg-primary-500">Top-up</button>
+                        </form>
                     </div>
-                    <form class="action-form top-up-form" data-user-id="${user.id}">
-                        <input type="number" class="credits-input" placeholder="Top-up Amount" min="1">
-                        <button type="submit">Top-up</button>
-                    </form>
                 </td>
             `;
             userTableBody.appendChild(row);
         });
-
-        addEventListeners();
-    }
-    
-    /**
-     * Attaches event listeners to all the new controls in the table.
-     */
-    function addEventListeners() {
-        // Listener for the plan change dropdowns
-        document.querySelectorAll('.plan-select').forEach(select => {
-            select.addEventListener('change', (event) => {
-                const userID = event.target.closest('.plan-changer').dataset.userId;
-                const newPlan = event.target.value;
-                if (confirm(`Are you sure you want to change user ${userID} to the ${newPlan} plan?`)) {
-                    changePlan(userID, newPlan);
-                } else {
-                    // Reset dropdown if cancelled
-                    fetchAndRenderUsers(); 
-                }
-            });
-        });
-
-        // Listener for the "Renew" buttons
-        document.querySelectorAll('.renew-btn').forEach(button => {
-            button.addEventListener('click', (event) => {
-                const userID = event.target.closest('.plan-changer').dataset.userId;
-                if (confirm(`Are you sure you want to renew the subscription for user ${userID}? This will reset their balance.`)) {
-                    renewSubscription(userID);
-                }
-            });
-        });
-
-        // Listener for the "Top-up" forms
-        document.querySelectorAll('.top-up-form').forEach(form => {
-            form.addEventListener('submit', (event) => {
-                event.preventDefault();
-                const userID = form.dataset.userId;
-                const input = form.querySelector('.credits-input');
-                const amountToAdd = parseInt(input.value, 10);
-                if (!isNaN(amountToAdd) && amountToAdd > 0) {
-                    topUpBalance(userID, amountToAdd);
-                } else {
-                    alert('Please enter a valid amount to top-up.');
-                }
-            });
-        });
-    }
-
-    // --- NEW API CALLING FUNCTIONS ---
-
-    async function changePlan(userID, newPlan) {
-        await apiCall(`/api/admin/users/plan`, { userID: parseInt(userID, 10), newPlan });
-    }
-
-    async function renewSubscription(userID) {
-        await apiCall(`/api/admin/users/renew`, { userID: parseInt(userID, 10) });
-    }
-
-    async function topUpBalance(userID, amountToAdd) {
-        await apiCall(`/api/admin/users/topup`, { userID: parseInt(userID, 10), amountToAdd });
     }
 
     /**
-     * A generic helper function for making API calls and refreshing the table.
-     * @param {string} url - The API endpoint to call.
+     * A generic helper for making admin API POST calls.
+     * @param {string} url - The API endpoint.
      * @param {object} body - The JSON body for the request.
      */
     async function apiCall(url, body) {
@@ -149,25 +84,71 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || 'An API error occurred.');
-            
-            await fetchAndRenderUsers(); // Refresh table on success
+            return result;
         } catch (error) {
             console.error(`API call to ${url} failed:`, error);
             alert(`Error: ${error.message}`);
+            return null;
         }
     }
-    
-    // --- Unchanged Functions ---
-    function handleSearch() {
-        const searchTerm = searchInput.value.toLowerCase();
-        const rows = userTableBody.querySelectorAll('tr');
-        rows.forEach(row => {
-            const username = row.cells[1].textContent.toLowerCase();
-            const phoneNumber = row.cells[2].textContent.toLowerCase();
-            row.style.display = (username.includes(searchTerm) || phoneNumber.includes(searchTerm)) ? '' : 'none';
+
+    /**
+     * Handles search input to filter the table rows.
+     */
+    function handleSearch(event) {
+        const searchTerm = event.target.value.toLowerCase();
+        userTableBody.querySelectorAll('tr').forEach(row => {
+            const searchTerms = row.dataset.searchTerms || '';
+            row.style.display = searchTerms.includes(searchTerm) ? '' : 'none';
         });
     }
 
-    fetchAndRenderUsers();
-    searchInput.addEventListener('input', handleSearch);
+    /**
+     * Handles clicks within the user table for actions.
+     */
+    async function handleTableClick(event) {
+        const target = event.target;
+        
+        // Handle "Add Credits" link click
+        if (target.classList.contains('add-credits-link')) {
+            event.preventDefault();
+            const form = target.nextElementSibling;
+            if (form) {
+                target.classList.add('hidden');
+                form.classList.remove('hidden');
+                form.querySelector('input').focus();
+            }
+        }
+
+        // Handle "Top-up" form submission
+        if (target.closest('.top-up-form')) {
+            event.preventDefault();
+            const form = target.closest('.top-up-form');
+            const container = form.closest('.action-container');
+            const userID = container.dataset.userId;
+            const input = form.querySelector('.credits-input');
+            const amount = parseInt(input.value, 10);
+
+            if (userID && !isNaN(amount) && amount > 0) {
+                const result = await apiCall('/api/admin/users/topup', { userID: parseInt(userID, 10), amountToAdd: amount });
+                if (result) {
+                    // Refresh the entire table to show new balance
+                    const users = await fetchUsers();
+                    renderUserTable(users);
+                }
+            } else {
+                alert('Please enter a valid amount.');
+            }
+        }
+    }
+    
+    // --- Initial Load and Event Binding ---
+    async function init() {
+        const users = await fetchUsers();
+        renderUserTable(users);
+        searchInput.addEventListener('input', handleSearch);
+        userTableBody.addEventListener('click', handleTableClick);
+    }
+
+    init();
 });

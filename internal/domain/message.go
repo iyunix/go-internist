@@ -10,7 +10,7 @@ type Message struct {
     Content     string    `gorm:"type:text;not null" json:"content"`
     
     // Production-ready fields:
-    MessageType string    `gorm:"size:50;index;default:'user'" json:"message_type"`
+    MessageType string    `gorm:"size:50;index;default:'user'" json:"messageType"`
     Archived    bool      `gorm:"default:false" json:"archived"`
     
     // Timestamps

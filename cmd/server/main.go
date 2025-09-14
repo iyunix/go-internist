@@ -46,15 +46,21 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// G:\go_internist\cmd\server\main.go
+
 func cspMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // --- FINAL, Authoritative Security Header Middleware ---
-
-        // This is the final, correct policy for your development setup.
+        // --- This is the new, corrected policy ---
         csp := "default-src 'self'; " +
-               "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-               "style-src 'self' 'unsafe-inline'; " +
-               "connect-src 'self' https://cdn.jsdelivr.net;" // <-- This new line fixes the .map file error.
+               // Allow scripts from Tailwind's CDN
+               "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; " +
+               // Allow stylesheets from Google Fonts
+               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+               // Allow font files to be loaded from Google's static domain
+               "font-src https://fonts.gstatic.com; " +
+               // Allow images from self (your domain)
+               "img-src 'self' data:; " +
+               "connect-src 'self';"
 
         w.Header().Set("Content-Security-Policy", csp)
         w.Header().Set("X-Frame-Options", "DENY")
@@ -64,7 +70,6 @@ func cspMiddleware(next http.Handler) http.Handler {
         next.ServeHTTP(w, r)
     })
 }
-
 func main() {
 	startTime := time.Now()
 

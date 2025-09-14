@@ -1,49 +1,92 @@
+{{template "layout.html" .}}
+
 {{define "styles"}}
-    <link rel="stylesheet" href="/static/css/auth.css">
+    {{/* --- Tailwind CSS & Google Fonts --- */}}
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style type="text/tailwindcss">
+        :root {
+            --primary-color: #13a4ec;
+            --primary-color-hover: #0b8dce;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+{{end}}
+
+{{define "scripts"}}
+    {{/* No specific scripts needed for this page */}}
 {{end}}
 
 {{define "content"}}
-<!-- NEW: Wrapper to center the form on the page -->
-<div class="auth-container">
-    <div class="auth-form">
-        <div class="auth-header">
-            <!-- NEW: Added branding for consistency -->
-            <h1>Internist</h1>
-            <h2>Create an Account</h2>
-        </div>
-
-        {{if .Error}}
-        <!-- UPDATED: Added a specific class for easier styling -->
-        <p class="form-error">{{.Error}}</p>
-        {{end}}
-
-        <form action="/register" method="POST">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-
-            <!-- UPDATED: Added .form-group for consistent spacing -->
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input id="username" name="username" type="text" required>
-            </div>
-
-            <div class="form-group">
-                <label for="phone_number">Phone Number</label>
-                <input id="phone_number" name="phone_number" type="tel" required> <!-- Changed type to "tel" for better semantics -->
-            </div>
-
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input id="password" name="password" type="password" required minlength="8">
-            </div>
-
-            <!-- UPDATED: Added classes for button styling -->
-            <button type="submit" class="btn btn-primary">Sign Up</button>
-        </form>
-        
-        <!-- NEW: Wrapper for the footer link -->
-        <div class="auth-footer">
-            <p>Already have an account? <a href="/login">Log in</a></p>
+<div class="relative flex min-h-screen w-full flex-col items-center justify-center bg-white text-gray-800">
+    <div class="absolute top-0 left-0 flex w-full items-center justify-between p-6">
+        <a class="flex items-center gap-3 text-xl font-bold text-gray-900" href="/">
+            <svg class="h-8 w-8 text-[var(--primary-color)]" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <path d="M24 6C14.0589 6 6 14.0589 6 24C6 33.9411 14.0589 42 24 42C33.9411 42 42 33.9411 42 24C42 14.0589 33.9411 6 24 6ZM24 38C16.268 38 10 31.732 10 24C10 16.268 16.268 10 24 10C31.732 10 38 16.268 38 24C38 31.732 31.732 38 24 38Z" fill="currentColor"></path>
+                <path d="M26 24H32V28H26V24Z" fill="currentColor" fill-opacity="0.5"></path>
+                <path d="M16 20H22V32H16V20Z" fill="currentColor"></path>
+            </svg>
+            Internist AI
+        </a>
+        <div class="flex items-center gap-4">
+            <span class="text-sm text-gray-600">Already have an account?</span>
+            <a class="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-200" href="/login">Log in</a>
         </div>
     </div>
+
+    <main class="w-full max-w-md p-8">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold tracking-tight text-gray-900">
+                Create your account
+            </h1>
+            <p class="mt-2 text-sm text-gray-600">
+                Evidence-based AI for healthcare.
+            </p>
+        </div>
+
+        {{/* Display error messages from the backend */}}
+        {{if .Error}}
+        <div class="my-4 rounded-md bg-red-50 p-3 text-center">
+            <p class="text-sm font-medium text-red-800">{{.Error}}</p>
+        </div>
+        {{end}}
+
+        <form action="/register" method="POST" class="mt-8 space-y-6">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700" for="username">Full name</label>
+                    <div class="mt-1">
+                        <input id="username" name="username" type="text" required class="block w-full appearance-none rounded-md border border-gray-300 px-3 py-3 placeholder-gray-400 shadow-sm focus:border-[var(--primary-color)] focus:outline-none focus:ring-[var(--primary-color)] sm:text-sm" placeholder="John Doe"/>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700" for="phone_number">Phone number</label>
+                    <div class="mt-1">
+                        <input id="phone_number" name="phone_number" type="tel" autocomplete="tel" required class="block w-full appearance-none rounded-md border border-gray-300 px-3 py-3 placeholder-gray-400 shadow-sm focus:border-[var(--primary-color)] focus:outline-none focus:ring-[var(--primary-color)] sm:text-sm" placeholder="09123456789"/>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700" for="password">Password</label>
+                    <div class="mt-1">
+                        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" class="block w-full appearance-none rounded-md border border-gray-300 px-3 py-3 placeholder-gray-400 shadow-sm focus:border-[var(--primary-color)] focus:outline-none focus:ring-[var(--primary-color)] sm:text-sm" placeholder="••••••••"/>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <button type="submit" class="flex w-full justify-center rounded-md border border-transparent bg-[var(--primary-color)] py-3 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--primary-color-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] focus:ring-offset-2">
+                    Create Account
+                </button>
+            </div>
+        </form>
+
+        <p class="mt-6 text-center text-xs text-gray-500">
+            By creating an account, you agree to our <a class="font-medium text-gray-900 hover:underline" href="/terms">Terms of Service</a> and <a class="font-medium text-gray-900 hover:underline" href="/privacy">Privacy Policy</a>.
+        </p>
+    </main>
 </div>
 {{end}}

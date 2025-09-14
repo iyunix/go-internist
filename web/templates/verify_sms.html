@@ -1,31 +1,140 @@
 {{template "layout.html" .}}
 
 {{define "styles"}}
-    <link rel="stylesheet" href="/static/css/auth.css">
-    <link rel="stylesheet" href="/static/css/verify_sms.css">
+    {{/* --- NEW: Tailwind CSS, Google Fonts & Icons --- */}}
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+    <style type="text/tailwindcss">
+        :root {
+            --primary-color: #13a4ec;
+            --background-color: #f8fafc;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --container-bg: #ffffff;
+            --input-bg: #f1f5f9;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+{{end}}
+
+{{define "scripts"}}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.querySelector('#verify-form');
+    const inputs = form.querySelectorAll('.code-input');
+    const hiddenCodeInput = form.querySelector('#sms_code');
+
+    const updateHiddenInput = () => {
+        let code = '';
+        inputs.forEach(input => {
+            code += input.value;
+        });
+        hiddenCodeInput.value = code;
+    };
+
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            // If a value is entered and it's not the last input, focus the next one
+            if (e.target.value && index < inputs.length - 1) {
+                inputs[index + 1].focus();
+            }
+            updateHiddenInput();
+        });
+
+        input.addEventListener('keydown', (e) => {
+            // If backspace is pressed on an empty input, focus the previous one
+            if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                inputs[index - 1].focus();
+            }
+        });
+
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasteData.length === 6 && /^\d+$/.test(pasteData)) {
+                inputs.forEach((input, i) => {
+                    input.value = pasteData[i];
+                });
+                updateHiddenInput();
+                inputs[inputs.length - 1].focus();
+            }
+        });
+    });
+});
+</script>
 {{end}}
 
 {{define "content"}}
-<div class="auth-container">
-    <div class="auth-form">
-        <div class="auth-header">
-            <h1>Verify Your Phone</h1>
-            <h2>Enter the code sent to your phone</h2>
+<div class="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
+    <div class="w-full max-w-md space-y-8">
+        <div>
+            <div class="flex justify-center">
+                <a href="/" class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary-color)] text-white">
+                    <span class="material-symbols-outlined text-3xl">health_and_safety</span>
+                </a>
+            </div>
+            <h2 class="mt-6 text-center text-3xl font-bold tracking-tight text-[var(--text-primary)]">
+                Verify your phone number
+            </h2>
+            <p class="mt-2 text-center text-sm text-[var(--text-secondary)]">
+                We've sent a 6-digit code to {{.PhoneNumber}}. Please enter it below.
+            </p>
         </div>
+        
+        {{/* Display error messages from the backend */}}
         {{if .Error}}
-        <p class="form-error">{{.Error}}</p>
+        <div class="rounded-md bg-red-50 p-4">
+            <div class="flex">
+                <div class="ml-3">
+                    <p class="text-sm font-medium text-red-800">{{.Error}}</p>
+                </div>
+            </div>
+        </div>
         {{end}}
-        <form action="/verify-sms" method="POST">
+
+        <form id="verify-form" class="mt-8 space-y-6" action="/verify-sms" method="POST">
+            {{/* Hidden inputs to pass required data to the backend */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="phone_number" value="{{.PhoneNumber}}">
-            <div class="form-group">
-                <label for="sms_code">Verification Code</label>
-                <input id="sms_code" name="sms_code" type="text" required maxlength="6" autocomplete="one-time-code">
+            <input type="hidden" id="sms_code" name="sms_code">
+
+            <div class="space-y-4">
+                <div class="flex justify-center space-x-2" dir="ltr">
+                    {{/* 6 individual inputs for the verification code */}}
+                    <input class="code-input h-14 w-12 rounded-md border-gray-300 bg-[var(--input-bg)] text-center text-2xl font-semibold text-[var(--text-primary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required/>
+                    <input class="code-input h-14 w-12 rounded-md border-gray-300 bg-[var(--input-bg)] text-center text-2xl font-semibold text-[var(--text-primary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*" required/>
+                    <input class="code-input h-14 w-12 rounded-md border-gray-300 bg-[var(--input-bg)] text-center text-2xl font-semibold text-[var(--text-primary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*" required/>
+                    <input class="code-input h-14 w-12 rounded-md border-gray-300 bg-[var(--input-bg)] text-center text-2xl font-semibold text-[var(--text-primary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*" required/>
+                    <input class="code-input h-14 w-12 rounded-md border-gray-300 bg-[var(--input-bg)] text-center text-2xl font-semibold text-[var(--text-primary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*" required/>
+                    <input class="code-input h-14 w-12 rounded-md border-gray-300 bg-[var(--input-bg)] text-center text-2xl font-semibold text-[var(--text-primary)] focus:border-[var(--primary-color)] focus:ring-[var(--primary-color)]" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*" required/>
+                </div>
             </div>
-            <button type="submit" class="btn btn-primary">Verify</button>
+            
+            <div>
+                <button class="group relative flex w-full justify-center rounded-md border border-transparent bg-[var(--primary-color)] px-4 py-3 text-sm font-semibold text-white hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] focus:ring-offset-2" type="submit">
+                    Verify
+                </button>
+            </div>
         </form>
-        <div class="auth-footer">
-            <p>Didn't receive a code? <a href="/resend-sms?phone={{.PhoneNumber}}">Resend</a></p>
+
+        <div class="text-center text-sm">
+            <p class="text-[var(--text-secondary)]">Didn't receive the code?
+                <a class="font-medium text-[var(--primary-color)] hover:text-opacity-80" href="/resend-sms?phone={{.PhoneNumber}}">
+                    Resend code
+                </a>
+            </p>
+        </div>
+
+        <div class="text-center text-sm">
+            <a class="font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]" href="/login">
+                <span class="material-symbols-outlined text-base align-middle -mt-1 mr-1">arrow_back</span>
+                Back to login
+            </a>
         </div>
     </div>
 </div>
