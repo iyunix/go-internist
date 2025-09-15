@@ -163,6 +163,34 @@ func (s *VerificationService) SendPasswordResetCode(ctx context.Context, phone s
 	return nil
 }
 
+// VerifyPasswordResetCode checks if a password reset code is valid for a given user.
+func (s *VerificationService) VerifyPasswordResetCode(ctx context.Context, userID uint, code string) error {
+	if userID == 0 || code == "" || len(code) != 6 {
+		return errors.New("invalid input for reset code verification")
+	}
+	s.logger.Info("verifying password reset code", "user_id", userID)
+
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to find user: %w", err)
+	}
+
+	if user.PasswordResetCode == "" {
+		return errors.New("no password reset has been requested")
+	}
+	if user.PasswordResetExpiresAt == nil || time.Now().After(*user.PasswordResetExpiresAt) {
+		return errors.New("password reset code has expired")
+	}
+	if user.PasswordResetCode != code {
+		return errors.New("invalid password reset code")
+	}
+
+	// success – code is valid
+	return nil
+}
+
+
+
 // VerifyAndResetPassword validates the reset code and updates the user's password.
 func (s *VerificationService) VerifyAndResetPassword(ctx context.Context, phone, code, newPassword string) error {
 	s.logger.Info("attempting to reset password", "phone", phone)

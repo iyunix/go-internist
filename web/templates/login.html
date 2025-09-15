@@ -36,8 +36,8 @@
         <form action="/login" class="mt-8 space-y-6" method="POST">
             <div class="rounded-md shadow-sm -space-y-px">
                 <div>
-                    <label class="sr-only" for="username">Username</label>
-                    <input autocomplete="username" class="form-input relative block w-full appearance-none rounded-t-md border border-gray-300 px-3 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-[#13a4ec] focus:outline-none focus:ring-[#13a4ec] sm:text-sm" id="username" name="username" placeholder="Username" required="" type="text"/>
+                    <label class="sr-only" for="username">Username or Phone Number</label>
+                    <input autocomplete="username tel" class="form-input relative block w-full appearance-none rounded-t-md border border-gray-300 px-3 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-[#13a4ec] focus:outline-none focus:ring-[#13a4ec] sm:text-sm" id="username" name="username" placeholder="Username or Phone Number" required="" type="text" value="{{.Identifier}}"/>
                 </div>
                 <div>
                     <label class="sr-only" for="password">Password</label>
