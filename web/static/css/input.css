@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hero background image */
+.hero-bg {
+  background-image: url('/static/images/hero-background.jpg');
+}
+
+/* Chat animation styles */
+.typing-indicator span { 
+  display: inline-block; 
+  width: 8px; 
+  height: 8px; 
+  border-radius: 50%; 
+  background-color: currentColor; 
+  animation: typing 1s infinite; 
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing { 
+  0%, 100% { transform: translateY(0); } 
+  50% { transform: translateY(-4px); } 
+}
+
+/* Status indicators */
+.status-item { 
+  display: flex; 
+  align-items: center; 
+  gap: 0.75rem; 
+  color: #64748b; 
+  transition: color 0.3s ease-in-out; 
+}
+.status-item.completed { color: #1e293b; }
+
+.status-icon .spinner { 
+  width: 1rem; 
+  height: 1rem; 
+  border: 2px solid currentColor; 
+  border-top-color: transparent; 
+  border-radius: 50%; 
+  animation: spin 1s linear infinite; 
+}
+
+@keyframes spin { 
+  to { transform: rotate(360deg); } 
+}
+
+/* 🚀 OPTIMIZED CHAT BUBBLE SIZING */
+.message-content {
+  max-width: min(600px, 75%) !important;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  display: inline-block;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+}
+
+/* User message bubbles (right aligned) */
+.flex.items-start.justify-end .message-content {
+  max-width: min(500px, 70%) !important;
+}
+
+/* Assistant message bubbles (left aligned) */  
+.flex.items-start.gap-3 .message-content {
+  max-width: min(650px, 80%) !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .message-content {
+    max-width: 90% !important;
+  }
+  .flex.items-start.justify-end .message-content,
+  .flex.items-start.gap-3 .message-content {
+    max-width: 85% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .message-content {
+    max-width: 95% !important;
+  }
+}

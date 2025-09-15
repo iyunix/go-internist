@@ -32,48 +32,74 @@ import (
 
 
 func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Max-Age", "86400")
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // ✅ More restrictive for production medical app
+        origin := r.Header.Get("Origin")
+        
+        // Define allowed origins for your medical application
+        allowedOrigins := []string{
+            "http://localhost:8080",
+            "https://your-internist-domain.com", // Replace with your actual domain
+        }
+        
+        // Check if origin is allowed
+        originAllowed := false
+        for _, allowedOrigin := range allowedOrigins {
+            if origin == allowedOrigin {
+                originAllowed = true
+                break
+            }
+        }
+        
+        if originAllowed {
+            w.Header().Set("Access-Control-Allow-Origin", origin)
+        }
+        
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
+        w.Header().Set("Access-Control-Allow-Credentials", "true")
+        w.Header().Set("Access-Control-Max-Age", "86400")
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+        if r.Method == "OPTIONS" {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
+        
+        next.ServeHTTP(w, r)
+    })
 }
 
+
 func cspMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		directives := []string{
-			"default-src 'self'",
-			"base-uri 'self'",
-			"object-src 'none'",
-			"frame-ancestors 'none'",
-			"img-src 'self' data:",
-			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-			"font-src 'self' https://fonts.gstatic.com",
-			"script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net",
-			
-			// CHANGE: Allow connections to the JSDelivr CDN for source maps.
-			"connect-src 'self' https://cdn.jsdelivr.net",
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        directives := []string{
+            "default-src 'self'",
+            "base-uri 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'none'",
+            "img-src 'self' data:",
+            
+            // ✅ Local assets only - no external font/style sources needed
+            "style-src 'self' 'unsafe-inline'",
+            "font-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+            
+            // ✅ Local connections only - no external CDN needed  
+            "connect-src 'self'",
+            
+            "frame-src 'none'",
+            "media-src 'self'",
+            "worker-src 'self'",
+        }
+        csp := strings.Join(directives, "; ")
 
-			"frame-src 'none'",
-			"media-src 'self'",
-			"worker-src 'self'",
-		}
-		csp := strings.Join(directives, "; ")
-
-		w.Header().Set("Content-Security-Policy", csp)
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		next.ServeHTTP(w, r)
-	})
+        w.Header().Set("Content-Security-Policy", csp)
+        w.Header().Set("X-Frame-Options", "DENY")
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+        
+        next.ServeHTTP(w, r)
+    })
 }
 
 func main() {

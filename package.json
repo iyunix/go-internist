@@ -1,0 +1,21 @@
+{
+  "name": "go_internist",
+  "version": "1.0.0",
+  "description": "Internist AI - Medical Chat Assistant",
+  "main": "index.js",
+  "scripts": {
+    "build-css": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/styles.css --minify",
+    "watch-css": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/styles.css --watch",
+    "dev": "npm run watch-css"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17"
+  }
+}
