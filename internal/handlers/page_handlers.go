@@ -3,10 +3,11 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
-	"path/filepath" // <-- ADD THIS IMPORT
+    "path/filepath"
 	"strconv"
 	"sync"
 
@@ -26,14 +27,22 @@ var (
 )
 
 var funcMap = template.FuncMap{
-	"subtract": func(a, b int) int {
-		return a - b
-	},
-	"percentage": func(a, b int) float64 {
-		if b == 0 { return 0 }
-		return (float64(a) / float64(b)) * 100
-	},
+    "subtract": func(a, b int) int {
+        return a - b
+    },
+    "percentage": func(a, b int) float64 {
+        if b == 0 { return 0 }
+        return (float64(a) / float64(b)) * 100
+    },
+    "json": func(v interface{}) (template.JS, error) {
+        b, err := json.Marshal(v)
+        if err != nil {
+            return "", err
+        }
+        return template.JS(b), nil
+    },
 }
+
 
 type RenderedMessage struct {
 	domain.Message

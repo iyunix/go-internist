@@ -1,0 +1,25 @@
+{{define "_message_alerts.html"}}
+{{if .Verified}}
+<div class="rounded-md bg-green-50 p-4">
+    <p class="text-sm font-medium text-green-800">Verification successful! You may now log in.</p>
+</div>
+{{end}}
+
+{{if .ResetSuccess}}
+<div class="rounded-md bg-green-50 p-4">
+    <p class="text-sm font-medium text-green-800">Password reset successfully! You may now log in with your new password.</p>
+</div>
+{{end}}
+
+{{if .Success}}
+<div class="rounded-md bg-green-50 p-4">
+    <p class="text-sm font-medium text-green-800">{{.Success}}</p>
+</div>
+{{end}}
+
+{{if .Error}}
+<div class="rounded-md bg-red-50 p-4">
+    <p class="text-sm font-medium text-red-800">{{.Error}}</p>
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,12 @@
+{{define "_auth_header.html"}}
+<div class="text-center">
+    <a href="/" class="flex justify-center items-center gap-3 mb-4">
+        <svg class="h-8 w-8 text-[#13a4ec]" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+            <path clip-rule="evenodd" d="M24 4H42V17.3333V30.6667H24V44H6V30.6667V17.3333H24V4Z" fill="currentColor" fill-rule="evenodd"></path>
+        </svg>
+        <h1 class="text-3xl font-bold tracking-tight text-gray-900">Internist AI</h1>
+    </a>
+    {{if .Title}}<h2 class="mt-2 text-center text-2xl font-semibold tracking-tight text-gray-800">{{.Title}}</h2>{{end}}
+    {{if .Subtitle}}<p class="mt-2 text-center text-sm text-gray-600">{{.Subtitle}}</p>{{end}}
+</div>
+{{end}}
