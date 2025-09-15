@@ -11,8 +11,7 @@ import (
     "strings"
     "syscall"
     "time"
-
-    "gorm.io/driver/postgres"  // Changed from sqlite
+    "gorm.io/driver/postgres"
     "github.com/gorilla/mux"
     "gorm.io/gorm"
 
@@ -78,16 +77,16 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func securityHeadersMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Content Security Policy
+        // Content Security Policy - Enhanced for production
         directives := []string{
             "default-src 'self'",
             "base-uri 'self'",
             "object-src 'none'",
             "frame-ancestors 'none'",
             "img-src 'self' data:",
-            "style-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'", // TODO: Remove 'unsafe-inline' in future iteration
             "font-src 'self'",
-            "script-src 'self' 'unsafe-inline'",
+            "script-src 'self' 'unsafe-inline'", // TODO: Remove 'unsafe-inline' in future iteration
             "connect-src 'self'",
             "frame-src 'none'",
             "media-src 'self'",
@@ -95,11 +94,10 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
         }
         csp := strings.Join(directives, "; ")
 
-        // Security headers
+        // Modern security headers (removed deprecated X-XSS-Protection)
         w.Header().Set("Content-Security-Policy", csp)
         w.Header().Set("X-Frame-Options", "DENY")
         w.Header().Set("X-Content-Type-Options", "nosniff")
-        w.Header().Set("X-XSS-Protection", "1; mode=block")
         w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
         w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         
@@ -115,6 +113,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 func staticFileMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         // Set cache headers for static files
+        // NOTE: In production, consider serving static files via Nginx/CDN for better performance
         if strings.HasPrefix(r.URL.Path, "/static/") {
             // Cache static files for 7 days
             w.Header().Set("Cache-Control", "public, max-age=604800")
@@ -137,64 +136,30 @@ func staticFileMiddleware(next http.Handler) http.Handler {
 func main() {
     startTime := time.Now()
 
-    // Logger
+    // Logger must be initialized first to be used by the config package
     logger := services.NewLogger("go_internist")
-    logger.Info("🤖 Internist AI - Medical Chat Assistant starting",
-        "version", "1.0.0",
-        "go_env", os.Getenv("GO_ENV"),
-        "log_level", os.Getenv("LOG_LEVEL"))
+    logger.Info("🤖 Internist AI - Medical Chat Assistant starting")
 
-    // Config
-    cfg := config.Load()
-    logger.Info("configuration loaded successfully")
+    // === REPLACE THIS ENTIRE BLOCK ===
+    // Load and validate config in one clean step
+    cfg, err := config.New()
+    if err != nil {
+        logger.Error("FATAL: Configuration error", "error", err)
+        os.Exit(1)
+    }
+    logger.Info("configuration loaded successfully", "environment", cfg.Environment)
+    // === END REPLACEMENT ===
 
-    // Database Connection - PostgreSQL
+    // Database Connection
     logger.Info("initializing PostgreSQL database connection")
-    
-    // Database configuration with defaults
-    dbHost := os.Getenv("DB_HOST")
-    if dbHost == "" {
-        dbHost = "localhost"
-    }
-    
-    dbUser := os.Getenv("DB_USER") 
-    if dbUser == "" {
-        dbUser = "internist"
-    }
-    
-    dbPassword := os.Getenv("DB_PASSWORD")
-    if dbPassword == "" {
-        dbPassword = "medical_ai_2025"
-    }
-    
-    dbName := os.Getenv("DB_NAME")
-    if dbName == "" {
-        dbName = "go_internist"
-    }
-    
-    dbPort := os.Getenv("DB_PORT")
-    if dbPort == "" {
-        dbPort = "5432"
-    }
-    
-    dbSSL := os.Getenv("DB_SSL_MODE")
-    if dbSSL == "" {
-        dbSSL = "disable"
-    }
-
-    // Build PostgreSQL connection string
-    dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=UTC",
-        dbHost, dbUser, dbPassword, dbName, dbPort, dbSSL)
-
-    // GORM config with connection pooling
-    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+    db, err := gorm.Open(postgres.Open(cfg.GetDatabaseDSN()), &gorm.Config{
         NowFunc: func() time.Time {
             return time.Now().UTC()
         },
     })
     if err != nil {
-        logger.Error("PostgreSQL connection failed", "error", err, 
-            "host", dbHost, "port", dbPort, "database", dbName)
+        logger.Error("PostgreSQL connection failed", "error", err,
+            "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName)
         os.Exit(1)
     }
 
@@ -211,10 +176,12 @@ func main() {
     sqlDB.SetConnMaxLifetime(time.Hour)
     
     logger.Info("PostgreSQL connected successfully", 
-        "host", dbHost, "port", dbPort, "database", dbName,
+        "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName,  // ✅ Use config fields
         "max_idle_conns", 10, "max_open_conns", 100)
 
-    // Migrations
+    // Database Migrations
+    // NOTE: In production, consider using golang-migrate/migrate for versioned migrations
+    // Run migrations as: ./migrate -database "postgres://..." -path ./migrations up
     logger.Info("running database migrations")
     if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
         logger.Error("database migration failed", "error", err,
@@ -341,7 +308,9 @@ func main() {
     r.Use(middleware.RecoverPanic)
     r.Use(middleware.LoggingMiddleware)
 
-    // Static files with proper configuration
+    // Static files configuration
+    // PRODUCTION NOTE: Consider serving static files via Nginx reverse proxy or CDN
+    // for better performance and reduced Go application load
     staticDir := os.Getenv("STATIC_DIR")
     if staticDir == "" {
         staticDir = "web/static"
@@ -383,7 +352,7 @@ func main() {
     api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
     api.HandleFunc("/chats", chatHandler.CreateChat).Methods("POST")
     api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
-    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.SendMessage).Methods("POST")  // Fixed the typo here!
+    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.SendMessage).Methods("POST")
     api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
     api.HandleFunc("/chats/{id:[0-9]+}/stream", chatHandler.StreamChatSSE).Methods("GET")
 

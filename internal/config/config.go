@@ -2,27 +2,27 @@
 package config
 
 import (
+    "errors"
     "fmt"
-    "log"
     "os"
     "strconv"
     "strings"
-    "time"
-
+    
     "github.com/joho/godotenv"
 )
 
+// Config holds all configuration for the application.
 type Config struct {
     // Server Configuration
-    ServerPort    string
-    Environment   string
-    LogLevel      string
-    
+    ServerPort  string
+    Environment string
+    LogLevel    string
+
     // Security
-    JWTSecretKey  string
+    JWTSecretKey   string
     AllowedOrigins []string
-    StaticDir     string
-    
+    StaticDir      string
+
     // Database Configuration
     DBHost     string
     DBUser     string
@@ -30,191 +30,186 @@ type Config struct {
     DBName     string
     DBPort     string
     DBSSLMode  string
-    
+
     // AI Services
     AvalaiAPIKeyEmbedding   string
     AvalaiAPIKeyTranslation string
     JabirAPIKey             string
     EmbeddingModelName      string
-    
+
     // Vector Database
     PineconeAPIKey    string
     PineconeIndexHost string
     PineconeNamespace string
     RetrievalTopK     int
-    
+
     // SMS Service
-    SMSAccessKey   string
-    SMSTemplateID  int
-    SMSAPIURL      string
-    SMSLineNumber  string
-    
+    SMSAccessKey  string
+    SMSTemplateID int
+    SMSAPIURL     string
+    SMSLineNumber string
+
     // Application Settings
     AdminPhoneNumber   string
     TranslationEnabled bool
-    
-    // Server Timeouts
-    ReadTimeout  time.Duration
-    WriteTimeout time.Duration
-    IdleTimeout  time.Duration
 }
 
-// Load reads configuration from environment variables or .env file.
-func Load() *Config {
-    // Use GO_ENV instead of ENV for consistency
-    env := os.Getenv("GO_ENV")
-    if env == "" {
-        env = os.Getenv("ENV") // Fallback for backward compatibility
-    }
-    if env == "" {
-        env = "development" // Default to development
-    }
-    
+// New loads, parses, and validates the application configuration.
+// It is the single entrypoint for creating a valid config.
+func New() (*Config, error) {
+    env := getEnv("GO_ENV", "development")
+
     // Load .env file only in non-production environments
-    if strings.ToLower(env) != "production" {
-        if err := godotenv.Load(); err != nil {
-            log.Println("No .env file found; continuing with environment variables")
-        }
+    if env != "production" {
+        // godotenv.Load returns an error if the file doesn't exist, which is fine.
+        _ = godotenv.Load()
     }
 
     cfg := &Config{
         // Server Configuration
-        ServerPort:  getEnv("SERVER_PORT", getEnv("PORT", "8080")),
+        ServerPort:  getEnv("SERVER_PORT", "8080"),
         Environment: env,
         LogLevel:    getEnv("LOG_LEVEL", "INFO"),
-        
+
         // Security
-        JWTSecretKey:   getEnv("JWT_SECRET_KEY", ""),
-        AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{"http://localhost:8080", "http://localhost:8081"}),
+        JWTSecretKey:   os.Getenv("JWT_SECRET_KEY"), // No default - must be provided
+        AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{}),
         StaticDir:      getEnv("STATIC_DIR", "web/static"),
-        
+
         // Database Configuration
-        DBHost:     getEnv("DB_HOST", "localhost"),
-        DBUser:     getEnv("DB_USER", "internist"),
-        DBPassword: getEnv("DB_PASSWORD", "medical_ai_2025"),
-        DBName:     getEnv("DB_NAME", "go_internist"),
+        DBHost:     os.Getenv("DB_HOST"),     // No default - must be provided
+        DBUser:     os.Getenv("DB_USER"),     // No default - must be provided
+        DBPassword: os.Getenv("DB_PASSWORD"), // No default - must be provided
+        DBName:     os.Getenv("DB_NAME"),     // No default - must be provided
         DBPort:     getEnv("DB_PORT", "5432"),
-        DBSSLMode:  getEnv("DB_SSL_MODE", "disable"),
-        
-        // AI Services  
-        AvalaiAPIKeyEmbedding:   getEnv("AVALAI_API_KEY_EMBEDDING", ""),
-        AvalaiAPIKeyTranslation: getEnv("AVALAI_API_KEY_TRANSLATION", ""),
-        JabirAPIKey:             getEnv("JABIR_API_KEY", ""),
-        EmbeddingModelName:      getEnv("EMBEDDING_MODEL_NAME", "text-embedding-3-large"), // Updated default
-        
+        DBSSLMode:  getDBSSLMode(env), // Smart default based on environment
+
+        // AI Services
+        AvalaiAPIKeyEmbedding:   os.Getenv("AVALAI_API_KEY_EMBEDDING"), // No default
+        AvalaiAPIKeyTranslation: os.Getenv("AVALAI_API_KEY_TRANSLATION"), // Optional
+        JabirAPIKey:             os.Getenv("JABIR_API_KEY"),              // No default
+        EmbeddingModelName:      getEnv("EMBEDDING_MODEL_NAME", "text-embedding-3-large"),
+
         // Vector Database
-        PineconeAPIKey:    getEnv("PINECONE_API_KEY", ""),
-        PineconeIndexHost: getEnv("PINECONE_INDEX_HOST", ""),
+        PineconeAPIKey:    os.Getenv("PINECONE_API_KEY"),    // No default
+        PineconeIndexHost: os.Getenv("PINECONE_INDEX_HOST"), // No default
         PineconeNamespace: getEnv("PINECONE_NAMESPACE", "UpToDate"),
-        RetrievalTopK:     getEnvAsInt("RAG_TOPK", 5), // Matches your .env
-        
+        RetrievalTopK:     getEnvAsInt("RAG_TOPK", 5),
+
         // SMS Service
-        SMSAccessKey:  getEnv("SMS_ACCESS_KEY", ""),
+        SMSAccessKey:  os.Getenv("SMS_ACCESS_KEY"), // No default
         SMSTemplateID: getEnvAsInt("SMS_TEMPLATE_ID", 0),
-        SMSAPIURL:     getEnv("SMS_API_URL", ""),
-        SMSLineNumber: getEnv("SMS_LINE_NUMBER", ""),
-        
+        SMSAPIURL:     os.Getenv("SMS_API_URL"), // No default
+        SMSLineNumber: os.Getenv("SMS_LINE_NUMBER"),
+
         // Application Settings
-        AdminPhoneNumber:   getEnv("ADMIN_PHONE_NUMBER", ""),
+        AdminPhoneNumber:   os.Getenv("ADMIN_PHONE_NUMBER"), // No default
         TranslationEnabled: getEnvAsBool("TRANSLATION_ENABLED", true),
-        
-        // Server Timeouts
-        ReadTimeout:  getEnvAsDuration("READ_TIMEOUT", 60*time.Second),
-        WriteTimeout: getEnvAsDuration("WRITE_TIMEOUT", 120*time.Second),
-        IdleTimeout:  getEnvAsDuration("IDLE_TIMEOUT", 120*time.Second),
     }
 
-    // Set translation enabled based on API key availability
+    // Smart logic: disable translation if no API key provided
     if cfg.AvalaiAPIKeyTranslation == "" {
         cfg.TranslationEnabled = false
-        log.Println("Translation disabled: No AVALAI_API_KEY_TRANSLATION provided")
     }
 
-    // Validate configuration
+    // Set development-friendly CORS origins if none provided
+    if len(cfg.AllowedOrigins) == 0 && cfg.Environment == "development" {
+        cfg.AllowedOrigins = []string{
+            "http://localhost:8080",
+            "http://localhost:8081",
+        }
+    }
+
+    // Validate the fully populated config struct
     if err := cfg.Validate(); err != nil {
-        log.Fatalf("Configuration validation failed: %v", err)
+        return nil, err
     }
 
-    return cfg
+    return cfg, nil
 }
 
-// Validate checks configuration for required fields and security requirements
+// Validate checks configuration for required fields and security best practices.
 func (c *Config) Validate() error {
-    var errors []string
-    
-    // Always validate critical security settings
+    // Required secrets validation
+    required := map[string]string{
+        "JWT_SECRET_KEY":           c.JWTSecretKey,
+        "DB_HOST":                  c.DBHost,
+        "DB_USER":                  c.DBUser,
+        "DB_PASSWORD":              c.DBPassword,
+        "DB_NAME":                  c.DBName,
+        "AVALAI_API_KEY_EMBEDDING": c.AvalaiAPIKeyEmbedding,
+        "JABIR_API_KEY":            c.JabirAPIKey,
+        "PINECONE_API_KEY":         c.PineconeAPIKey,
+        "PINECONE_INDEX_HOST":      c.PineconeIndexHost,
+        "SMS_ACCESS_KEY":           c.SMSAccessKey,
+        "SMS_API_URL":              c.SMSAPIURL,
+        "ADMIN_PHONE_NUMBER":       c.AdminPhoneNumber,
+    }
+
+    var missing []string
+    for key, value := range required {
+        if value == "" {
+            missing = append(missing, key)
+        }
+    }
+
+    if len(missing) > 0 {
+        return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+    }
+
+    // Security validations
     if len(c.JWTSecretKey) < 32 {
-        errors = append(errors, "JWT_SECRET_KEY must be at least 32 characters long for security")
+        return errors.New("JWT_SECRET_KEY must be at least 32 characters long for security")
     }
-    
-    // Database validation
-    if c.DBHost == "" {
-        errors = append(errors, "DB_HOST is required")
+
+    if c.SMSTemplateID == 0 {
+        return errors.New("SMS_TEMPLATE_ID is required and cannot be 0")
     }
-    if c.DBName == "" {
-        errors = append(errors, "DB_NAME is required")
-    }
-    if c.DBUser == "" {
-        errors = append(errors, "DB_USER is required")
-    }
-    if c.DBPassword == "" {
-        errors = append(errors, "DB_PASSWORD is required")
-    }
-    
-    // Production-specific validation
-    if strings.ToLower(c.Environment) == "production" {
-        productionRequired := map[string]string{
-            "AVALAI_API_KEY_EMBEDDING": c.AvalaiAPIKeyEmbedding,
-            "JABIR_API_KEY":           c.JabirAPIKey,
-            "PINECONE_API_KEY":        c.PineconeAPIKey,
-            "PINECONE_INDEX_HOST":     c.PineconeIndexHost,
-            "ADMIN_PHONE_NUMBER":      c.AdminPhoneNumber,
+
+    // Production-specific security checks
+    if c.IsProduction() {
+        if c.DBSSLMode == "disable" {
+            return errors.New("DB_SSL_MODE cannot be 'disable' in production - use 'require' or 'verify-full'")
         }
         
-        for key, value := range productionRequired {
-            if value == "" {
-                errors = append(errors, fmt.Sprintf("%s is required in production", key))
+        if len(c.AllowedOrigins) == 0 {
+            return errors.New("ALLOWED_ORIGINS must be set in production")
+        }
+        
+        // Check for localhost origins in production
+        for _, origin := range c.AllowedOrigins {
+            if strings.Contains(origin, "localhost") {
+                return errors.New("localhost origins not allowed in production")
             }
         }
-        
-        // Production security checks
-        if strings.Contains(strings.ToLower(c.JWTSecretKey), "test") || 
-           strings.Contains(strings.ToLower(c.JWTSecretKey), "dev") {
-            errors = append(errors, "JWT_SECRET_KEY appears to contain test/dev values - use production secret")
-        }
     }
-    
-    if len(errors) > 0 {
-        return fmt.Errorf("configuration errors: %s", strings.Join(errors, "; "))
-    }
-    
+
     return nil
 }
 
-// GetDatabaseDSN builds PostgreSQL connection string
+// GetDatabaseDSN builds PostgreSQL connection string.
 func (c *Config) GetDatabaseDSN() string {
     return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=UTC",
         c.DBHost, c.DBUser, c.DBPassword, c.DBName, c.DBPort, c.DBSSLMode)
 }
 
-// IsProduction returns true if running in production environment
+// IsProduction returns true if running in production environment.
 func (c *Config) IsProduction() bool {
     return strings.ToLower(c.Environment) == "production"
 }
 
-// IsDevelopment returns true if running in development environment
-func (c *Config) IsDevelopment() bool {
-    return strings.ToLower(c.Environment) == "development"
+// Load is kept for backward compatibility but deprecated
+// Use New() instead
+func Load() *Config {
+    cfg, err := New()
+    if err != nil {
+        panic(fmt.Sprintf("Configuration error: %v", err))
+    }
+    return cfg
 }
 
-// IsTranslationEnabled returns true if translation is available and enabled
-func (c *Config) IsTranslationEnabled() bool {
-    return c.TranslationEnabled && c.AvalaiAPIKeyTranslation != ""
-}
+// --- Helper Functions ---
 
-// Helper Functions
-
-// getEnv returns the value of an environment variable or a default.
 func getEnv(key, defaultValue string) string {
     if value, exists := os.LookupEnv(key); exists {
         return value
@@ -222,58 +217,59 @@ func getEnv(key, defaultValue string) string {
     return defaultValue
 }
 
-// getEnvAsInt gets an env var as an integer, with a fallback.
 func getEnvAsInt(key string, defaultValue int) int {
-    strValue := getEnv(key, "")
-    if strValue == "" {
+    strValue, exists := os.LookupEnv(key)
+    if !exists {
         return defaultValue
     }
     intValue, err := strconv.Atoi(strValue)
     if err != nil {
-        log.Printf("Warning: could not parse env var %s as integer. Using default value %d", key, defaultValue)
         return defaultValue
     }
     return intValue
 }
 
-// getEnvAsBool gets an env var as a boolean, with a fallback.
 func getEnvAsBool(key string, defaultValue bool) bool {
-    strValue := getEnv(key, "")
-    if strValue == "" {
+    strValue, exists := os.LookupEnv(key)
+    if !exists {
         return defaultValue
     }
     boolValue, err := strconv.ParseBool(strValue)
     if err != nil {
-        log.Printf("Warning: could not parse env var %s as boolean. Using default value %v", key, defaultValue)
         return defaultValue
     }
     return boolValue
 }
 
-// getEnvAsSlice gets an env var as a string slice (comma-separated), with a fallback.
 func getEnvAsSlice(key string, defaultValue []string) []string {
-    strValue := getEnv(key, "")
-    if strValue == "" {
+    strValue, exists := os.LookupEnv(key)
+    if !exists {
         return defaultValue
     }
-    
     values := strings.Split(strValue, ",")
-    for i, v := range values {
-        values[i] = strings.TrimSpace(v)
+    // Trim whitespace from each value
+    for i := range values {
+        values[i] = strings.TrimSpace(values[i])
     }
     return values
 }
 
-// getEnvAsDuration gets an env var as a duration, with a fallback.
-func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
+// getDBSSLMode handles the critical security setting for database SSL
+func getDBSSLMode(env string) string {
+    mode := os.Getenv("DB_SSL_MODE")
+    
+    // Force secure defaults based on environment
+    if env == "production" && (mode == "" || mode == "disable") {
+        return "require" // Force SSL in production
     }
-    duration, err := time.ParseDuration(strValue)
-    if err != nil {
-        log.Printf("Warning: could not parse env var %s as duration. Using default value %v", key, defaultValue)
-        return defaultValue
+    
+    if mode == "" {
+        return "disable" // Safe for local development
     }
-    return duration
+    
+    return mode
+}
+
+func (c *Config) IsTranslationEnabled() bool {
+    return c.TranslationEnabled
 }
