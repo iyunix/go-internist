@@ -2,33 +2,75 @@
 package config
 
 import (
+    "fmt"
     "log"
     "os"
     "strconv"
     "strings"
+    "time"
 
     "github.com/joho/godotenv"
 )
 
 type Config struct {
-    ServerPort               string
-    JWTSecretKey            string
+    // Server Configuration
+    ServerPort    string
+    Environment   string
+    LogLevel      string
+    
+    // Security
+    JWTSecretKey  string
+    AllowedOrigins []string
+    StaticDir     string
+    
+    // Database Configuration
+    DBHost     string
+    DBUser     string
+    DBPassword string
+    DBName     string
+    DBPort     string
+    DBSSLMode  string
+    
+    // AI Services
     AvalaiAPIKeyEmbedding   string
-    AvalaiAPIKeyTranslation string // NEW: For Persian-to-English translation
+    AvalaiAPIKeyTranslation string
     JabirAPIKey             string
     EmbeddingModelName      string
-    PineconeAPIKey          string
-    PineconeIndexHost       string
-    PineconeNamespace       string
-    RetrievalTopK           int
-    AdminPhoneNumber        string
-    Environment             string
-    TranslationEnabled      bool // NEW: Enable/disable translation feature
+    
+    // Vector Database
+    PineconeAPIKey    string
+    PineconeIndexHost string
+    PineconeNamespace string
+    RetrievalTopK     int
+    
+    // SMS Service
+    SMSAccessKey   string
+    SMSTemplateID  int
+    SMSAPIURL      string
+    SMSLineNumber  string
+    
+    // Application Settings
+    AdminPhoneNumber   string
+    TranslationEnabled bool
+    
+    // Server Timeouts
+    ReadTimeout  time.Duration
+    WriteTimeout time.Duration
+    IdleTimeout  time.Duration
 }
 
 // Load reads configuration from environment variables or .env file.
 func Load() *Config {
-    env := os.Getenv("ENV")
+    // Use GO_ENV instead of ENV for consistency
+    env := os.Getenv("GO_ENV")
+    if env == "" {
+        env = os.Getenv("ENV") // Fallback for backward compatibility
+    }
+    if env == "" {
+        env = "development" // Default to development
+    }
+    
+    // Load .env file only in non-production environments
     if strings.ToLower(env) != "production" {
         if err := godotenv.Load(); err != nil {
             log.Println("No .env file found; continuing with environment variables")
@@ -36,19 +78,50 @@ func Load() *Config {
     }
 
     cfg := &Config{
-        ServerPort:               getEnv("SERVER_PORT", "8080"),
-        JWTSecretKey:            getEnv("JWT_SECRET_KEY", ""),
+        // Server Configuration
+        ServerPort:  getEnv("SERVER_PORT", getEnv("PORT", "8080")),
+        Environment: env,
+        LogLevel:    getEnv("LOG_LEVEL", "INFO"),
+        
+        // Security
+        JWTSecretKey:   getEnv("JWT_SECRET_KEY", ""),
+        AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{"http://localhost:8080", "http://localhost:8081"}),
+        StaticDir:      getEnv("STATIC_DIR", "web/static"),
+        
+        // Database Configuration
+        DBHost:     getEnv("DB_HOST", "localhost"),
+        DBUser:     getEnv("DB_USER", "internist"),
+        DBPassword: getEnv("DB_PASSWORD", "medical_ai_2025"),
+        DBName:     getEnv("DB_NAME", "go_internist"),
+        DBPort:     getEnv("DB_PORT", "5432"),
+        DBSSLMode:  getEnv("DB_SSL_MODE", "disable"),
+        
+        // AI Services  
         AvalaiAPIKeyEmbedding:   getEnv("AVALAI_API_KEY_EMBEDDING", ""),
-        AvalaiAPIKeyTranslation: getEnv("AVALAI_API_KEY_TRANSLATION", ""), // NEW
+        AvalaiAPIKeyTranslation: getEnv("AVALAI_API_KEY_TRANSLATION", ""),
         JabirAPIKey:             getEnv("JABIR_API_KEY", ""),
-        EmbeddingModelName:      getEnv("EMBEDDING_MODEL_NAME", "text-embedding-ada-002"),
-        PineconeAPIKey:          getEnv("PINECONE_API_KEY", ""),
-        PineconeIndexHost:       getEnv("PINECONE_INDEX_HOST", ""),
-        PineconeNamespace:       getEnv("PINECONE_NAMESPACE", "UpToDate"),
-        RetrievalTopK:           getEnvAsInt("RAG_TOPK", 8),
-        AdminPhoneNumber:        getEnv("ADMIN_PHONE_NUMBER", ""),
-        Environment:             env,
-        TranslationEnabled:      getEnvAsBool("TRANSLATION_ENABLED", true), // NEW: Default enabled
+        EmbeddingModelName:      getEnv("EMBEDDING_MODEL_NAME", "text-embedding-3-large"), // Updated default
+        
+        // Vector Database
+        PineconeAPIKey:    getEnv("PINECONE_API_KEY", ""),
+        PineconeIndexHost: getEnv("PINECONE_INDEX_HOST", ""),
+        PineconeNamespace: getEnv("PINECONE_NAMESPACE", "UpToDate"),
+        RetrievalTopK:     getEnvAsInt("RAG_TOPK", 5), // Matches your .env
+        
+        // SMS Service
+        SMSAccessKey:  getEnv("SMS_ACCESS_KEY", ""),
+        SMSTemplateID: getEnvAsInt("SMS_TEMPLATE_ID", 0),
+        SMSAPIURL:     getEnv("SMS_API_URL", ""),
+        SMSLineNumber: getEnv("SMS_LINE_NUMBER", ""),
+        
+        // Application Settings
+        AdminPhoneNumber:   getEnv("ADMIN_PHONE_NUMBER", ""),
+        TranslationEnabled: getEnvAsBool("TRANSLATION_ENABLED", true),
+        
+        // Server Timeouts
+        ReadTimeout:  getEnvAsDuration("READ_TIMEOUT", 60*time.Second),
+        WriteTimeout: getEnvAsDuration("WRITE_TIMEOUT", 120*time.Second),
+        IdleTimeout:  getEnvAsDuration("IDLE_TIMEOUT", 120*time.Second),
     }
 
     // Set translation enabled based on API key availability
@@ -57,32 +130,89 @@ func Load() *Config {
         log.Println("Translation disabled: No AVALAI_API_KEY_TRANSLATION provided")
     }
 
-    // Validation for production environments
-    if strings.ToLower(env) == "production" {
-        missing := []string{}
-        if cfg.JWTSecretKey == "" {
-            missing = append(missing, "JWT_SECRET_KEY")
-        }
-        if cfg.AvalaiAPIKeyEmbedding == "" {
-            missing = append(missing, "AVALAI_API_KEY_EMBEDDING")
-        }
-        if cfg.JabirAPIKey == "" {
-            missing = append(missing, "JABIR_API_KEY")
-        }
-        if cfg.PineconeAPIKey == "" {
-            missing = append(missing, "PINECONE_API_KEY")
-        }
-        if cfg.PineconeIndexHost == "" {
-            missing = append(missing, "PINECONE_INDEX_HOST")
-        }
-        // Note: Translation API key is optional, won't fail production if missing
-        if len(missing) > 0 {
-            log.Fatalf("Missing required production environment variables: %v", missing)
-        }
+    // Validate configuration
+    if err := cfg.Validate(); err != nil {
+        log.Fatalf("Configuration validation failed: %v", err)
     }
 
     return cfg
 }
+
+// Validate checks configuration for required fields and security requirements
+func (c *Config) Validate() error {
+    var errors []string
+    
+    // Always validate critical security settings
+    if len(c.JWTSecretKey) < 32 {
+        errors = append(errors, "JWT_SECRET_KEY must be at least 32 characters long for security")
+    }
+    
+    // Database validation
+    if c.DBHost == "" {
+        errors = append(errors, "DB_HOST is required")
+    }
+    if c.DBName == "" {
+        errors = append(errors, "DB_NAME is required")
+    }
+    if c.DBUser == "" {
+        errors = append(errors, "DB_USER is required")
+    }
+    if c.DBPassword == "" {
+        errors = append(errors, "DB_PASSWORD is required")
+    }
+    
+    // Production-specific validation
+    if strings.ToLower(c.Environment) == "production" {
+        productionRequired := map[string]string{
+            "AVALAI_API_KEY_EMBEDDING": c.AvalaiAPIKeyEmbedding,
+            "JABIR_API_KEY":           c.JabirAPIKey,
+            "PINECONE_API_KEY":        c.PineconeAPIKey,
+            "PINECONE_INDEX_HOST":     c.PineconeIndexHost,
+            "ADMIN_PHONE_NUMBER":      c.AdminPhoneNumber,
+        }
+        
+        for key, value := range productionRequired {
+            if value == "" {
+                errors = append(errors, fmt.Sprintf("%s is required in production", key))
+            }
+        }
+        
+        // Production security checks
+        if strings.Contains(strings.ToLower(c.JWTSecretKey), "test") || 
+           strings.Contains(strings.ToLower(c.JWTSecretKey), "dev") {
+            errors = append(errors, "JWT_SECRET_KEY appears to contain test/dev values - use production secret")
+        }
+    }
+    
+    if len(errors) > 0 {
+        return fmt.Errorf("configuration errors: %s", strings.Join(errors, "; "))
+    }
+    
+    return nil
+}
+
+// GetDatabaseDSN builds PostgreSQL connection string
+func (c *Config) GetDatabaseDSN() string {
+    return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=UTC",
+        c.DBHost, c.DBUser, c.DBPassword, c.DBName, c.DBPort, c.DBSSLMode)
+}
+
+// IsProduction returns true if running in production environment
+func (c *Config) IsProduction() bool {
+    return strings.ToLower(c.Environment) == "production"
+}
+
+// IsDevelopment returns true if running in development environment
+func (c *Config) IsDevelopment() bool {
+    return strings.ToLower(c.Environment) == "development"
+}
+
+// IsTranslationEnabled returns true if translation is available and enabled
+func (c *Config) IsTranslationEnabled() bool {
+    return c.TranslationEnabled && c.AvalaiAPIKeyTranslation != ""
+}
+
+// Helper Functions
 
 // getEnv returns the value of an environment variable or a default.
 func getEnv(key, defaultValue string) string {
@@ -100,13 +230,13 @@ func getEnvAsInt(key string, defaultValue int) int {
     }
     intValue, err := strconv.Atoi(strValue)
     if err != nil {
-        log.Printf("Warning: could not parse env var %s as integer. Using default value.", key)
+        log.Printf("Warning: could not parse env var %s as integer. Using default value %d", key, defaultValue)
         return defaultValue
     }
     return intValue
 }
 
-// NEW: getEnvAsBool gets an env var as a boolean, with a fallback.
+// getEnvAsBool gets an env var as a boolean, with a fallback.
 func getEnvAsBool(key string, defaultValue bool) bool {
     strValue := getEnv(key, "")
     if strValue == "" {
@@ -114,13 +244,36 @@ func getEnvAsBool(key string, defaultValue bool) bool {
     }
     boolValue, err := strconv.ParseBool(strValue)
     if err != nil {
-        log.Printf("Warning: could not parse env var %s as boolean. Using default value.", key)
+        log.Printf("Warning: could not parse env var %s as boolean. Using default value %v", key, defaultValue)
         return defaultValue
     }
     return boolValue
 }
 
-// NEW: Helper method to check if translation is available
-func (c *Config) IsTranslationEnabled() bool {
-    return c.TranslationEnabled && c.AvalaiAPIKeyTranslation != ""
+// getEnvAsSlice gets an env var as a string slice (comma-separated), with a fallback.
+func getEnvAsSlice(key string, defaultValue []string) []string {
+    strValue := getEnv(key, "")
+    if strValue == "" {
+        return defaultValue
+    }
+    
+    values := strings.Split(strValue, ",")
+    for i, v := range values {
+        values[i] = strings.TrimSpace(v)
+    }
+    return values
+}
+
+// getEnvAsDuration gets an env var as a duration, with a fallback.
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+    strValue := getEnv(key, "")
+    if strValue == "" {
+        return defaultValue
+    }
+    duration, err := time.ParseDuration(strValue)
+    if err != nil {
+        log.Printf("Warning: could not parse env var %s as duration. Using default value %v", key, defaultValue)
+        return defaultValue
+    }
+    return duration
 }
