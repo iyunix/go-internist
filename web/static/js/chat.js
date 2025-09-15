@@ -52,19 +52,54 @@ if (cancelDeleteBtn) {
 }
 
 if (newChatBtn) {
-    newChatBtn.addEventListener('click', () => {
-        const title = prompt("Enter a title for your new chat:");
-        if (title && title.trim() !== "") { 
-            createNewChat(title); 
+    newChatBtn.addEventListener('click', async () => {
+        // No more prompt - use temporary title
+        const chatTitle = "New Chat";
+        
+        try {
+            const response = await fetch('/api/chats', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ title: chatTitle.trim() }) 
+            });
+            if (!response.ok) throw new Error('Failed to create chat');
+
+            const newChat = await response.json();
+            activeChatID = newChat.id;
+            window.INTERNIST_DATA.activeChatID = newChat.id;
+
+            // Add new chat to the chat list UI
+            if (chatListContainer) {
+                const newChatHTML = `
+                    <div class="group mt-1 flex items-center justify-between gap-3 rounded-md px-3 py-2 bg-gray-100 hover:bg-gray-100" data-chat-item-id="${newChat.id}">
+                        <a class="flex items-center gap-3 truncate w-full" href="/chat?id=${newChat.id}">
+                            <span class="material-symbols-outlined text-lg text-[#64748b]">chat_bubble</span>
+                            <span class="truncate">${newChat.title}</span>
+                        </a>
+                        <button class="delete-chat-btn flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-800" data-chat-id="${newChat.id}" title="Delete chat">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                    </div>
+                `;
+                chatListContainer.querySelector('h2')?.insertAdjacentHTML('afterend', newChatHTML);
+            }
+
+            // Redirect to the new chat page
+            window.location.href = `/chat?id=${newChat.id}`;
+        } catch (error) {
+            console.error('Error creating new chat:', error);
+            alert('Could not create a new chat. Please try again.');
         }
     });
 }
 
+
 if (welcomeNewChatBtn) {
-    welcomeNewChatBtn.addEventListener('click', () => { 
-        newChatBtn.click(); 
+    welcomeNewChatBtn.addEventListener('click', () => {
+        newChatBtn?.click();
     });
 }
+
 
 if (chatForm) {
     chatForm.addEventListener('submit', (e) => {

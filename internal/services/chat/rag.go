@@ -138,7 +138,7 @@ STYLE:
 - Start with a clear H1 or H2 title for the topic.
 - Use short paragraphs, bullet points, and subheadings to organize content.
 - Use tables for concise comparisons (e.g., dosing, side effects, labs).
-- If citing context, add a final "## References" section listing relevant sources from CONTEXT (by file name or brief identifiers). Do not invent sources.
+- If citing context, add a final "## References" section listing relevant sources from CONTEXT (by file name). Do not invent sources.
 - Do not include personal data or PHI.
 
 CONTEXT (JSON array of chunks to use as your sole evidence base):

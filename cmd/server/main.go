@@ -243,7 +243,7 @@ func main() {
 	// Router
 	logger.Info("configuring HTTP router and middleware")
 	r := mux.NewRouter()
-	authMW := middleware.NewJWTMiddleware(authService)
+	authMW := middleware.NewJWTMiddleware(authService, userService, cfg.AdminPhoneNumber)
 	adminMW := middleware.RequireAdmin(userRepo)
 
 	r.Use(corsMiddleware)

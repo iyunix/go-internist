@@ -29,9 +29,38 @@
 
         {{if .Error}}
         <div class="rounded-md bg-red-50 p-4">
-            <p class="text-sm font-medium text-red-800">{{.Error}}</p>
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <span class="material-symbols-outlined text-red-400">error</span>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-800">
+                        {{if eq .Error "user_not_found"}}
+                            Account Not Found
+                        {{else if eq .Error "session_expired"}}
+                            Session Expired
+                        {{else if eq .Error "invalid_credentials"}}
+                            Invalid Phone Number or Password
+                        {{else}}
+                            Login Error
+                        {{end}}
+                    </h3>
+                    <div class="mt-2 text-sm text-red-700">
+                        {{if eq .Error "user_not_found"}}
+                            We couldn't find an account with that phone number. Please check the number or register a new account.
+                        {{else if eq .Error "session_expired"}}
+                            Your session has expired. Please log in again to continue.
+                        {{else if eq .Error "invalid_credentials"}}
+                            The phone number or password you entered is incorrect. Please try again.
+                        {{else}}
+                            An error occurred during login. Please try again or contact support.
+                        {{end}}
+                    </div>
+                </div>
+            </div>
         </div>
         {{end}}
+
 
         <form action="/login" class="mt-8 space-y-6" method="POST">
             <div class="rounded-md shadow-sm -space-y-px">
