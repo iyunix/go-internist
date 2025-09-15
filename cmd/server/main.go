@@ -213,7 +213,7 @@ func main() {
 
 	// Chat service
 	logger.Info("initializing medical chat service")
-	chatService, err := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService, cfg.RetrievalTopK)
+	chatService, err := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService, cfg.RetrievalTopK, cfg) // Add cfg parameter
 	if err != nil {
 		logger.Error("chat service initialization failed", "error", err,
 			"retrieval_top_k", cfg.RetrievalTopK)

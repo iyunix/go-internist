@@ -47,32 +47,55 @@
   to { transform: rotate(360deg); } 
 }
 
-/* 🚀 OPTIMIZED CHAT BUBBLE SIZING */
+/* 🚀 PERFECTED CHAT BUBBLE SIZING - Fixed Version */
 .message-content {
-  max-width: min(600px, 75%) !important;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  display: inline-block;
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
+  max-width: 75% !important;
+  width: fit-content !important;
+  display: inline-block !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  padding: 0.75rem 1rem !important;
+  border-radius: 1rem !important;
+  box-sizing: border-box !important;
 }
 
-/* User message bubbles (right aligned) */
+/* User messages - right aligned with proper width constraint */
 .flex.items-start.justify-end .message-content {
-  max-width: min(500px, 70%) !important;
+  max-width: 70% !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
 }
 
-/* Assistant message bubbles (left aligned) */  
+/* Assistant messages - left aligned with slightly wider constraint */  
 .flex.items-start.gap-3 .message-content {
-  max-width: min(650px, 80%) !important;
+  max-width: 80% !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+
+/* Prose content within message bubbles */
+.message-content.prose,
+.message-content.prose-lg {
+  max-width: inherit !important;
+}
+
+/* Force proper alignment for user message containers */
+.flex.flex-col.items-end {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
 }
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .message-content {
-    max-width: 90% !important;
+    max-width: 85% !important;
   }
-  .flex.items-start.justify-end .message-content,
+  
+  .flex.items-start.justify-end .message-content {
+    max-width: 80% !important;
+  }
+  
   .flex.items-start.gap-3 .message-content {
     max-width: 85% !important;
   }
@@ -81,5 +104,21 @@
 @media (max-width: 480px) {
   .message-content {
     max-width: 95% !important;
+  }
+}
+
+/* Smooth appearance animation */
+.message-content {
+  animation: messageAppear 0.2s ease-out;
+}
+
+@keyframes messageAppear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
