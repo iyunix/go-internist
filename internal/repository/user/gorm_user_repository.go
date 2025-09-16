@@ -12,6 +12,20 @@ import (
     "gorm.io/gorm"
 )
 
+
+
+// FindByPhoneNumber - Enhanced with validation (alias for FindByPhone for compatibility)
+func (r *gormUserRepository) FindByPhoneNumber(ctx context.Context, phoneNumber string) (*domain.User, error) {
+    if err := r.validatePhone(phoneNumber); err != nil {
+        return nil, fmt.Errorf("phone validation failed: %w", err)
+    }
+    
+    var user domain.User
+    err := r.db.WithContext(ctx).Where("phone_number = ?", phoneNumber).First(&user).Error
+    return r.handleFindError(err, &user)
+}
+
+
 var ErrUserNotFound = errors.New("user not found")
 
 type gormUserRepository struct {

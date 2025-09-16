@@ -1,78 +1,62 @@
-// G:\go_internist\cmd\server\main.go
+// File: cmd/server/main.go
 package main
 
 import (
     "context"
+    "database/sql"
+    "encoding/json"  // ✅ Added for health check JSON encoding
     "fmt"
     "net/http"
     "os"
     "os/signal"
-    "strconv"
     "strings"
     "syscall"
     "time"
-    "gorm.io/driver/postgres"
+
     "github.com/gorilla/mux"
+    "gorm.io/driver/postgres"
     "gorm.io/gorm"
 
     "github.com/iyunix/go-internist/internal/config"
     "github.com/iyunix/go-internist/internal/domain"
     "github.com/iyunix/go-internist/internal/handlers"
     "github.com/iyunix/go-internist/internal/middleware"
-    "github.com/iyunix/go-internist/internal/repository/chat"
-    "github.com/iyunix/go-internist/internal/repository/message"
-    "github.com/iyunix/go-internist/internal/repository/user"
     "github.com/iyunix/go-internist/internal/services"
-    "github.com/iyunix/go-internist/internal/services/admin_services"
-    "github.com/iyunix/go-internist/internal/services/ai"
-    "github.com/iyunix/go-internist/internal/services/sms"
-    "github.com/iyunix/go-internist/internal/services/user_services"
 )
 
-func corsMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        origin := r.Header.Get("Origin")
-        
-        // Get allowed origins from environment or use defaults
-        allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
-        var allowedOrigins []string
-        
-        if allowedOriginsStr != "" {
-            allowedOrigins = strings.Split(allowedOriginsStr, ",")
-        } else {
-            // Default allowed origins for development/production
-            allowedOrigins = []string{
-                "http://localhost:8080",
-                "http://localhost:8081",
-                "https://yourdomain.com", // Update this with your actual domain
-            }
-        }
-        
-        // Check if origin is allowed
-        originAllowed := false
-        for _, allowedOrigin := range allowedOrigins {
-            if origin == strings.TrimSpace(allowedOrigin) {
-                originAllowed = true
-                break
-            }
-        }
-        
-        if originAllowed {
-            w.Header().Set("Access-Control-Allow-Origin", origin)
-        }
-        
-        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
-        w.Header().Set("Access-Control-Allow-Credentials", "true")
-        w.Header().Set("Access-Control-Max-Age", "86400")
+//go:generate wire
 
-        if r.Method == "OPTIONS" {
-            w.WriteHeader(http.StatusOK)
-            return
-        }
-        
-        next.ServeHTTP(w, r)
-    })
+func corsMiddleware(allowedOrigins []string) mux.MiddlewareFunc {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            origin := r.Header.Get("Origin")
+            
+            // Check if origin is allowed
+            originAllowed := false
+            for _, allowedOrigin := range allowedOrigins {
+                if origin == strings.TrimSpace(allowedOrigin) {
+                    originAllowed = true
+                    break
+                }
+            }
+            
+            if originAllowed {
+                w.Header().Set("Access-Control-Allow-Origin", origin)
+            }
+            
+            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
+            w.Header().Set("Access-Control-Allow-Credentials", "true")
+            w.Header().Set("Access-Control-Max-Age", "86400")
+
+            if r.Method == "OPTIONS" {
+                w.WriteHeader(http.StatusOK)
+                return
+            }
+            
+            next.ServeHTTP(w, r)
+        })
+    }
 }
 
 func securityHeadersMiddleware(next http.Handler) http.Handler {
@@ -133,244 +117,156 @@ func staticFileMiddleware(next http.Handler) http.Handler {
     })
 }
 
-func main() {
-    startTime := time.Now()
+func healthCheckHandler(app *Application, sqlDB *sql.DB) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+        defer cancel()
+        
+        health := map[string]interface{}{
+            "service":   "go_internist",
+            "timestamp": time.Now().UTC().Format(time.RFC3339),
+            "status":    "healthy",
+            "checks":    make(map[string]interface{}),
+        }
+        
+        allHealthy := true
+        
+        // Database Health Check
+        if err := sqlDB.PingContext(ctx); err != nil {
+            health["checks"].(map[string]interface{})["database"] = map[string]interface{}{
+                "status": "unhealthy",
+                "error":  err.Error(),
+            }
+            allHealthy = false
+        } else {
+            health["checks"].(map[string]interface{})["database"] = map[string]interface{}{
+                "status": "healthy",
+            }
+        }
 
-    // Logger must be initialized first to be used by the config package
-    logger := services.NewLogger("go_internist")
-    logger.Info("🤖 Internist AI - Medical Chat Assistant starting")
+        aiStatus := app.AIService.GetProviderStatus()
+        if !aiStatus.IsHealthy {
+            health["checks"].(map[string]interface{})["ai_provider"] = map[string]interface{}{
+                "status":  "unhealthy",
+                "message": aiStatus.Message,
+                "embedding_healthy": aiStatus.EmbeddingHealthy,
+                "llm_healthy":      aiStatus.LLMHealthy,
+            }
+            allHealthy = false
+        } else {
+            health["checks"].(map[string]interface{})["ai_provider"] = map[string]interface{}{
+                "status": "healthy",
+                "embedding_healthy": aiStatus.EmbeddingHealthy,
+                "llm_healthy":      aiStatus.LLMHealthy,
+            }
+        }
+        
 
-    // === REPLACE THIS ENTIRE BLOCK ===
-    // Load and validate config in one clean step
-    cfg, err := config.New()
-    if err != nil {
-        logger.Error("FATAL: Configuration error", "error", err)
-        os.Exit(1)
+        // Pinecone Health Check (lightweight)
+        if err := app.PineconeService.HealthCheck(ctx); err != nil {
+            health["checks"].(map[string]interface{})["pinecone"] = map[string]interface{}{
+                "status": "unhealthy",
+                "error":  err.Error(),
+            }
+            allHealthy = false
+        } else {
+            health["checks"].(map[string]interface{})["pinecone"] = map[string]interface{}{
+                "status": "healthy",
+            }
+        }
+        
+        // Set overall status
+        if !allHealthy {
+            health["status"] = "unhealthy"
+            w.WriteHeader(http.StatusServiceUnavailable)
+        } else {
+            w.WriteHeader(http.StatusOK)
+        }
+        
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(health)
     }
-    logger.Info("configuration loaded successfully", "environment", cfg.Environment)
-    // === END REPLACEMENT ===
+}
 
-    // Database Connection
-    logger.Info("initializing PostgreSQL database connection")
-    db, err := gorm.Open(postgres.Open(cfg.GetDatabaseDSN()), &gorm.Config{
-        NowFunc: func() time.Time {
-            return time.Now().UTC()
-        },
-    })
-    if err != nil {
-        logger.Error("PostgreSQL connection failed", "error", err,
-            "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName)
-        os.Exit(1)
-    }
-
-    // Configure connection pool
-    sqlDB, err := db.DB()
-    if err != nil {
-        logger.Error("failed to get underlying sql.DB", "error", err)
-        os.Exit(1)
-    }
-    
-    // Connection pool settings
-    sqlDB.SetMaxIdleConns(10)
-    sqlDB.SetMaxOpenConns(100)
-    sqlDB.SetConnMaxLifetime(time.Hour)
-    
-    logger.Info("PostgreSQL connected successfully", 
-        "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName,  // ✅ Use config fields
-        "max_idle_conns", 10, "max_open_conns", 100)
-
-    // Database Migrations
-    // NOTE: In production, consider using golang-migrate/migrate for versioned migrations
-    // Run migrations as: ./migrate -database "postgres://..." -path ./migrations up
-    logger.Info("running database migrations")
-    if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}); err != nil {
-        logger.Error("database migration failed", "error", err,
-            "tables", []string{"users", "chats", "messages"})
-        os.Exit(1)
-    }
-    logger.Info("database migrations completed successfully")
-
-    // Repositories
-    logger.Info("initializing repositories")
-    userRepo := user.NewGormUserRepository(db)
-    chatRepo := chat.NewChatRepository(db)
-    messageRepo := message.NewMessageRepository(db)
-    logger.Info("repositories initialized successfully")
-
-    // Services
-    logger.Info("initializing services")
-
-    // AI Service
-    logger.Info("configuring AI service")
-    aiConfig := ai.DefaultConfig()
-    aiConfig.EmbeddingKey = cfg.AvalaiAPIKeyEmbedding
-    aiConfig.LLMKey = cfg.JabirAPIKey
-    aiConfig.EmbeddingBaseURL = "https://api.avalai.ir/v1"
-    aiConfig.LLMBaseURL = "https://openai.jabirproject.org/v1"
-    aiConfig.EmbeddingModel = cfg.EmbeddingModelName
-    if err := aiConfig.Validate(); err != nil {
-        logger.Error("AI configuration validation failed", "error", err)
-        os.Exit(1)
-    }
-    aiProvider := ai.NewOpenAIProvider(aiConfig)
-    aiService := services.NewAIService(aiProvider, logger)
-    logger.Info("AI service initialized successfully",
-        "embedding_model", cfg.EmbeddingModelName,
-        "embedding_provider", "avalai",
-        "llm_provider", "jabir")
-
-    // Pinecone
-    logger.Info("initializing Pinecone vector database service")
-    pineconeService, err := services.NewPineconeService(
-        cfg.PineconeAPIKey,
-        cfg.PineconeIndexHost,
-        cfg.PineconeNamespace,
-    )
-    if err != nil {
-        logger.Error("Pinecone service initialization failed", "error", err,
-            "index_host", cfg.PineconeIndexHost,
-            "namespace", cfg.PineconeNamespace)
-        os.Exit(1)
-    }
-    logger.Info("Pinecone service initialized successfully",
-        "namespace", cfg.PineconeNamespace,
-        "retry_config", "3 attempts with backoff")
-
-    // SMS
-    logger.Info("configuring SMS service")
-    smsConfig := &sms.Config{
-        AccessKey: os.Getenv("SMS_ACCESS_KEY"),
-        TemplateID: func() int {
-            id, _ := strconv.Atoi(os.Getenv("SMS_TEMPLATE_ID"))
-            return id
-        }(),
-        APIURL:  os.Getenv("SMS_API_URL"),
-        Timeout: 10 * time.Second,
-    }
-    if err := smsConfig.Validate(); err != nil {
-        logger.Error("SMS configuration validation failed", "error", err)
-        os.Exit(1)
-    }
-    smsProvider := sms.NewSMSIRProvider(smsConfig)
-    smsService := services.NewSMSService(smsProvider, logger)
-    logger.Info("SMS service initialized successfully",
-        "provider", "sms.ir",
-        "timeout", smsConfig.Timeout.String())
-
-    // User services
-    logger.Info("initializing user services")
-    userService := user_services.NewUserService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber, logger)
-    authService := user_services.NewAuthService(userRepo, cfg.JWTSecretKey, cfg.AdminPhoneNumber, logger)
-    balanceService := user_services.NewBalanceService(userRepo, logger)
-    verificationService := user_services.NewVerificationService(userRepo, smsService, authService, logger)
-    logger.Info("user services initialized successfully",
-        "services", []string{"user", "auth", "balance", "lockout", "verification"})
-
-    // Chat service
-    logger.Info("initializing medical chat service")
-    chatService, err := services.NewChatService(chatRepo, messageRepo, aiService, pineconeService, cfg.RetrievalTopK, cfg)
-    if err != nil {
-        logger.Error("chat service initialization failed", "error", err,
-            "retrieval_top_k", cfg.RetrievalTopK)
-        os.Exit(1)
-    }
-    logger.Info("medical chat service initialized successfully",
-        "retrieval_top_k", cfg.RetrievalTopK)
-
-    // Admin service
-    adminService := admin_services.NewAdminService(userRepo, logger)
-    logger.Info("admin service initialized successfully")
-
-    // Handlers
-    logger.Info("initializing HTTP handlers")
-    authHandler := handlers.NewAuthHandler(userService, authService, verificationService, smsService, balanceService)
-
-    chatHandler, err := handlers.NewChatHandler(userService, chatService)
-    if err != nil {
-        logger.Error("chat handler initialization failed", "error", err)
-        os.Exit(1)
-    }
-
-    pageHandler := handlers.NewPageHandler(userService, chatService, adminService)
-    adminHandler := handlers.NewAdminHandler(adminService)
-    logger.Info("HTTP handlers initialized successfully")
-
-    // Router
-    logger.Info("configuring HTTP router and middleware")
-    r := mux.NewRouter()
-    authMW := middleware.NewJWTMiddleware(authService, userService, cfg.AdminPhoneNumber)
-    adminMW := middleware.RequireAdmin(userRepo)
-
-    // Global middleware
-    r.Use(corsMiddleware)
+// ✅ FIXED: Accept cfg parameter
+func setupGlobalMiddleware(r *mux.Router, cfg *config.Config) {
+    r.Use(corsMiddleware(cfg.AllowedOrigins))  // ✅ cfg now available
     r.Use(securityHeadersMiddleware)
     r.Use(staticFileMiddleware)
     r.Use(middleware.RecoverPanic)
     r.Use(middleware.LoggingMiddleware)
+}
 
-    // Static files configuration
-    // PRODUCTION NOTE: Consider serving static files via Nginx reverse proxy or CDN
-    // for better performance and reduced Go application load
-    staticDir := os.Getenv("STATIC_DIR")
+// ✅ FIXED: Accept cfg parameter
+func setupStaticFiles(r *mux.Router, cfg *config.Config) {
+    staticDir := cfg.StaticDir  // ✅ From config
     if staticDir == "" {
         staticDir = "web/static"
     }
     r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
+}
 
-    // Health check endpoint
-    r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        _, _ = w.Write([]byte(`{"status":"ok","service":"go_internist","timestamp":"` + time.Now().UTC().Format(time.RFC3339) + `"}`))
-    }).Methods("GET")
+// ✅ FIXED: Accept sqlDB parameter
+func setupPublicRoutes(r *mux.Router, app *Application, sqlDB *sql.DB) {
+    // Enhanced health check endpoint
+    r.HandleFunc("/health", healthCheckHandler(app, sqlDB)).Methods("GET")  // ✅ sqlDB now available
+
+    // Frontend logging
+    r.HandleFunc("/api/log", handlers.LogFrontendEvent).Methods("POST")
 
     // Public routes
-    r.HandleFunc("/api/log", handlers.LogFrontendEvent).Methods("POST")
-    r.HandleFunc("/", pageHandler.ShowIndexPage).Methods("GET")
-    r.HandleFunc("/login", pageHandler.ShowLoginPage).Methods("GET")
-    r.HandleFunc("/register", pageHandler.ShowRegisterPage).Methods("GET")
-    r.HandleFunc("/login", authHandler.Login).Methods("POST")
-    r.HandleFunc("/register", authHandler.Register).Methods("POST")
-    r.HandleFunc("/logout", authHandler.Logout).Methods("GET")
-    r.HandleFunc("/verify-sms", authHandler.VerifySMS).Methods("POST")
-    r.HandleFunc("/verify-sms", pageHandler.ShowVerifySMSPage).Methods("GET")
-    r.HandleFunc("/resend-sms", authHandler.ResendSMS).Methods("GET")
+    r.HandleFunc("/", app.PageHandler.ShowIndexPage).Methods("GET")
+    r.HandleFunc("/login", app.PageHandler.ShowLoginPage).Methods("GET")
+    r.HandleFunc("/register", app.PageHandler.ShowRegisterPage).Methods("GET")
+    r.HandleFunc("/login", app.AuthHandler.Login).Methods("POST")
+    r.HandleFunc("/register", app.AuthHandler.Register).Methods("POST")
+    r.HandleFunc("/logout", app.AuthHandler.Logout).Methods("GET")
+    r.HandleFunc("/verify-sms", app.AuthHandler.VerifySMS).Methods("POST")
+    r.HandleFunc("/verify-sms", app.PageHandler.ShowVerifySMSPage).Methods("GET")
+    r.HandleFunc("/resend-sms", app.AuthHandler.ResendSMS).Methods("GET")
 
     // Password reset routes
-    r.HandleFunc("/forgot-password", pageHandler.ShowForgotPasswordPage).Methods("GET")
-    r.HandleFunc("/forgot-password", authHandler.HandleForgotPassword).Methods("POST")
-    r.HandleFunc("/reset-password", pageHandler.ShowResetPasswordPage).Methods("GET")
-    r.HandleFunc("/reset-password", authHandler.HandleResetPassword).Methods("POST")
+    r.HandleFunc("/forgot-password", app.PageHandler.ShowForgotPasswordPage).Methods("GET")
+    r.HandleFunc("/forgot-password", app.AuthHandler.HandleForgotPassword).Methods("POST")
+    r.HandleFunc("/reset-password", app.PageHandler.ShowResetPasswordPage).Methods("GET")
+    r.HandleFunc("/reset-password", app.AuthHandler.HandleResetPassword).Methods("POST")
+}
 
+func setupProtectedRoutes(r *mux.Router, app *Application, authMW mux.MiddlewareFunc) {
     // Protected routes
     protected := r.PathPrefix("/").Subrouter()
     protected.Use(authMW)
-    protected.HandleFunc("/chat", pageHandler.ShowChatPage).Methods("GET")
+    protected.HandleFunc("/chat", app.PageHandler.ShowChatPage).Methods("GET")
 
+    // API routes
     api := protected.PathPrefix("/api").Subrouter()
-    api.HandleFunc("/user/balance", authHandler.GetUserCreditHandler).Methods("GET")
-    api.HandleFunc("/chats", chatHandler.GetUserChats).Methods("GET")
-    api.HandleFunc("/chats", chatHandler.CreateChat).Methods("POST")
-    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.GetChatMessages).Methods("GET")
-    api.HandleFunc("/chats/{id:[0-9]+}/messages", chatHandler.SendMessage).Methods("POST")
-    api.HandleFunc("/chats/{id:[0-9]+}", chatHandler.DeleteChat).Methods("DELETE")
-    api.HandleFunc("/chats/{id:[0-9]+}/stream", chatHandler.StreamChatSSE).Methods("GET")
+    api.HandleFunc("/user/balance", app.AuthHandler.GetUserCreditHandler).Methods("GET")
+    api.HandleFunc("/chats", app.ChatHandler.GetUserChats).Methods("GET")
+    api.HandleFunc("/chats", app.ChatHandler.CreateChat).Methods("POST")
+    api.HandleFunc("/chats/{id:[0-9]+}/messages", app.ChatHandler.GetChatMessages).Methods("GET")
+    api.HandleFunc("/chats/{id:[0-9]+}/messages", app.ChatHandler.SendMessage).Methods("POST")
+    api.HandleFunc("/chats/{id:[0-9]+}", app.ChatHandler.DeleteChat).Methods("DELETE")
+    api.HandleFunc("/chats/{id:[0-9]+}/stream", app.ChatHandler.StreamChatSSE).Methods("GET")
+}
 
+func setupAdminRoutes(r *mux.Router, app *Application, authMW, adminMW mux.MiddlewareFunc) {
     // Admin routes
     adminPage := r.PathPrefix("/admin").Subrouter()
     adminPage.Use(authMW)
     adminPage.Use(adminMW)
-    adminPage.HandleFunc("", pageHandler.ShowAdminPage).Methods("GET")
+    adminPage.HandleFunc("", app.PageHandler.ShowAdminPage).Methods("GET")
 
     adminAPI := r.PathPrefix("/api/admin").Subrouter()
     adminAPI.Use(authMW)
     adminAPI.Use(adminMW)
-    adminAPI.HandleFunc("/users", adminHandler.GetAllUsersHandler).Methods("GET")
-    adminAPI.HandleFunc("/users/export", adminHandler.ExportUsersCSVHandler).Methods("GET")
-    adminAPI.HandleFunc("/users/plan", adminHandler.ChangePlanHandler).Methods("POST")
-    adminAPI.HandleFunc("/users/renew", adminHandler.RenewSubscriptionHandler).Methods("POST")
-    adminAPI.HandleFunc("/users/topup", adminHandler.TopUpBalanceHandler).Methods("POST")
+    adminAPI.HandleFunc("/users", app.AdminHandler.GetAllUsersHandler).Methods("GET")
+    adminAPI.HandleFunc("/users/export", app.AdminHandler.ExportUsersCSVHandler).Methods("GET")
+    adminAPI.HandleFunc("/users/plan", app.AdminHandler.ChangePlanHandler).Methods("POST")
+    adminAPI.HandleFunc("/users/renew", app.AdminHandler.RenewSubscriptionHandler).Methods("POST")
+    adminAPI.HandleFunc("/users/topup", app.AdminHandler.TopUpBalanceHandler).Methods("POST")
+}
 
+func setupErrorHandlers(r *mux.Router, pageHandler *handlers.PageHandler) {
     // Custom error handlers
     r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         pageHandler.ShowErrorPage(w, "404", "Page Not Found", "The page you are looking for does not exist.")
@@ -378,11 +274,11 @@ func main() {
     r.MethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         pageHandler.ShowErrorPage(w, "405", "Method Not Allowed", "The method is not allowed for this resource.")
     })
+}
 
-    logger.Info("HTTP routes configured successfully")
-
-    // Server configuration with environment variable support
-    port := os.Getenv("PORT")
+// ✅ FIXED: Read from config instead of os.Getenv
+func getServerPort(cfg *config.Config) string {
+    port := cfg.Port  // ✅ From config
     if port == "" {
         port = cfg.ServerPort
     }
@@ -392,31 +288,35 @@ func main() {
     if !strings.HasPrefix(port, ":") {
         port = ":" + port
     }
+    return port
+}
 
-    srv := &http.Server{
-        Addr:         port,
-        Handler:      r,
-        ReadTimeout:  60 * time.Second,
-        WriteTimeout: 120 * time.Second,  // Increased for chat streaming
-        IdleTimeout:  120 * time.Second,
-        MaxHeaderBytes: 1 << 20, // 1 MB
+func configureDatabaseConnection(db *gorm.DB) (*sql.DB, error) {
+    sqlDB, err := db.DB()
+    if err != nil {
+        return nil, err
     }
+    
+    // Connection pool settings
+    sqlDB.SetMaxIdleConns(10)
+    sqlDB.SetMaxOpenConns(100)
+    sqlDB.SetConnMaxLifetime(time.Hour)
+    
+    return sqlDB, nil
+}
 
-    initTime := time.Since(startTime)
-    logger.Info("🚀 server initialization completed",
-        "initialization_time", initTime.String(),
-        "port", port)
-        
-    logger.Info("==================================================")
-    logger.Info("🤖 Internist AI - Medical Chat Assistant", "status", "ready")
-    logger.Info("🚀 server starting", "port", port)
-    logger.Info("🌐 local access", "url", fmt.Sprintf("http://localhost%s", port))
-    logger.Info("💬 chat interface", "url", fmt.Sprintf("http://localhost%s/chat", port))
-    logger.Info("🔒 admin panel", "url", fmt.Sprintf("http://localhost%s/admin", port))
-    logger.Info("🔄 server ready to accept connections")
-    logger.Info("==================================================")
+func runDatabaseMigrations(db *gorm.DB, logger services.Logger) error {
+    logger.Info("running database migrations")
+    if err := db.AutoMigrate(&domain.User{}, &domain.Chat{}, &domain.Message{}, &domain.VerificationCode{}); err != nil {
+        logger.Error("database migration failed", "error", err,
+            "tables", []string{"users", "chats", "messages", "verification_codes"})
+        return err
+    }
+    logger.Info("database migrations completed successfully")
+    return nil
+}
 
-    // Start server
+func startServer(srv *http.Server, logger services.Logger) {
     go func() {
         logger.Info("HTTP server starting", "address", srv.Addr)
         if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -425,8 +325,9 @@ func main() {
         }
         logger.Info("HTTP server stopped accepting new connections")
     }()
+}
 
-    // Graceful shutdown
+func gracefulShutdown(srv *http.Server, sqlDB *sql.DB, logger services.Logger, startTime time.Time) {
     stop := make(chan os.Signal, 1)
     signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
     receivedSignal := <-stop
@@ -455,4 +356,105 @@ func main() {
     logger.Info("✅ server stopped gracefully",
         "shutdown_time", shutdownTime.String(),
         "total_uptime", totalUptime.String())
+}
+
+func main() {
+    startTime := time.Now()
+
+    // Initialize logger first (still manual since it's used everywhere)
+    logger := services.NewLogger("go_internist")
+    logger.Info("🤖 Internist AI - Medical Chat Assistant starting")
+
+    // Load and validate config in one clean step
+    cfg, err := config.New()
+    if err != nil {
+        logger.Error("FATAL: Configuration error", "error", err)
+        os.Exit(1)
+    }
+    logger.Info("configuration loaded successfully", "environment", cfg.Environment)
+
+    // Database Connection
+    logger.Info("initializing PostgreSQL database connection")
+    db, err := gorm.Open(postgres.Open(cfg.GetDatabaseDSN()), &gorm.Config{
+        NowFunc: func() time.Time {
+            return time.Now().UTC()
+        },
+    })
+    if err != nil {
+        logger.Error("PostgreSQL connection failed", "error", err,
+            "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName)
+        os.Exit(1)
+    }
+
+    // Configure connection pool
+    sqlDB, err := configureDatabaseConnection(db)
+    if err != nil {
+        logger.Error("failed to configure database connection", "error", err)
+        os.Exit(1)
+    }
+    
+    logger.Info("PostgreSQL connected successfully", 
+        "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName,
+        "max_idle_conns", 10, "max_open_conns", 100)
+
+    // Database Migrations
+    if err := runDatabaseMigrations(db, logger); err != nil {
+        os.Exit(1)
+    }
+
+    // 🎯 WIRE MAGIC - Replace 50+ lines of manual DI with this single call!
+    logger.Info("initializing application with Wire dependency injection")
+    app, err := InitializeApplication(db)
+    if err != nil {
+        logger.Error("application initialization failed", "error", err)
+        os.Exit(1)
+    }
+    logger.Info("🚀 application initialized successfully via Wire DI")
+
+    // Router setup
+    logger.Info("configuring HTTP router and middleware")
+    r := mux.NewRouter()
+    
+    // Create middleware instances
+    authMW := middleware.NewJWTMiddleware(app.AuthService, app.UserService, cfg.AdminPhoneNumber)
+    adminMW := middleware.RequireAdmin(app.UserRepo)
+    
+    // ✅ CORRECTED: Pass all required parameters
+    setupGlobalMiddleware(r, cfg)          // ✅ Pass cfg
+    setupStaticFiles(r, cfg)               // ✅ Pass cfg  
+    setupPublicRoutes(r, app, sqlDB)       // ✅ Pass sqlDB
+    setupProtectedRoutes(r, app, authMW)
+    setupAdminRoutes(r, app, authMW, adminMW)
+    setupErrorHandlers(r, app.PageHandler)
+    
+    logger.Info("HTTP routes configured successfully")
+
+    // Server configuration
+    port := getServerPort(cfg)
+    srv := &http.Server{
+        Addr:         port,
+        Handler:      r,
+        ReadTimeout:  60 * time.Second,
+        WriteTimeout: 120 * time.Second,  // Increased for chat streaming
+        IdleTimeout:  120 * time.Second,
+        MaxHeaderBytes: 1 << 20, // 1 MB
+    }
+
+    initTime := time.Since(startTime)
+    logger.Info("🚀 server initialization completed",
+        "initialization_time", initTime.String(),
+        "port", port)
+        
+    logger.Info("==================================================")
+    logger.Info("🤖 Internist AI - Medical Chat Assistant", "status", "ready")
+    logger.Info("🚀 server starting", "port", port)
+    logger.Info("🌐 local access", "url", fmt.Sprintf("http://localhost%s", port))
+    logger.Info("💬 chat interface", "url", fmt.Sprintf("http://localhost%s/chat", port))
+    logger.Info("🔒 admin panel", "url", fmt.Sprintf("http://localhost%s/admin", port))
+    logger.Info("🔄 server ready to accept connections")
+    logger.Info("==================================================")
+
+    // Start server and handle graceful shutdown
+    startServer(srv, logger)
+    gracefulShutdown(srv, sqlDB, logger, startTime)
 }

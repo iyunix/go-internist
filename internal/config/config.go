@@ -17,10 +17,11 @@ type Config struct {
     ServerPort  string
     Environment string
     LogLevel    string
+    Port        string    // ✅ Added missing Port field
 
     // Security
     JWTSecretKey   string
-    AllowedOrigins []string
+    AllowedOrigins []string  // ✅ Single definition (removed duplicate)
     StaticDir      string
 
     // Database Configuration
@@ -43,11 +44,10 @@ type Config struct {
     PineconeNamespace string
     RetrievalTopK     int
 
-    // SMS Service
+    // SMS Configuration - ✅ Clean field definitions
     SMSAccessKey  string
-    SMSTemplateID int
+    SMSTemplateID string  // Keep as string, convert to int in wire.go
     SMSAPIURL     string
-    SMSLineNumber string
 
     // Application Settings
     AdminPhoneNumber   string
@@ -61,19 +61,21 @@ func New() (*Config, error) {
 
     // Load .env file only in non-production environments
     if env != "production" {
-        // godotenv.Load returns an error if the file doesn't exist, which is fine.
-        _ = godotenv.Load()
+        // Try to load .env from multiple possible locations
+        _ = loadEnvFile()
     }
+
 
     cfg := &Config{
         // Server Configuration
         ServerPort:  getEnv("SERVER_PORT", "8080"),
         Environment: env,
         LogLevel:    getEnv("LOG_LEVEL", "INFO"),
+        Port:        getEnv("PORT", ""), // ✅ Added Port field
 
         // Security
         JWTSecretKey:   os.Getenv("JWT_SECRET_KEY"), // No default - must be provided
-        AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{}),
+        AllowedOrigins: getEnvAsSlice("ALLOWED_ORIGINS", []string{}), // ✅ Single definition
         StaticDir:      getEnv("STATIC_DIR", "web/static"),
 
         // Database Configuration
@@ -96,11 +98,10 @@ func New() (*Config, error) {
         PineconeNamespace: getEnv("PINECONE_NAMESPACE", "UpToDate"),
         RetrievalTopK:     getEnvAsInt("RAG_TOPK", 5),
 
-        // SMS Service
+        // SMS Service - ✅ Clean field population
         SMSAccessKey:  os.Getenv("SMS_ACCESS_KEY"), // No default
-        SMSTemplateID: getEnvAsInt("SMS_TEMPLATE_ID", 0),
+        SMSTemplateID: os.Getenv("SMS_TEMPLATE_ID"), // Keep as string
         SMSAPIURL:     os.Getenv("SMS_API_URL"), // No default
-        SMSLineNumber: os.Getenv("SMS_LINE_NUMBER"),
 
         // Application Settings
         AdminPhoneNumber:   os.Getenv("ADMIN_PHONE_NUMBER"), // No default
@@ -162,8 +163,8 @@ func (c *Config) Validate() error {
         return errors.New("JWT_SECRET_KEY must be at least 32 characters long for security")
     }
 
-    if c.SMSTemplateID == 0 {
-        return errors.New("SMS_TEMPLATE_ID is required and cannot be 0")
+    if c.SMSTemplateID == "" {
+        return errors.New("SMS_TEMPLATE_ID is required")
     }
 
     // Production-specific security checks
@@ -196,6 +197,11 @@ func (c *Config) GetDatabaseDSN() string {
 // IsProduction returns true if running in production environment.
 func (c *Config) IsProduction() bool {
     return strings.ToLower(c.Environment) == "production"
+}
+
+// IsTranslationEnabled returns whether translation is enabled
+func (c *Config) IsTranslationEnabled() bool {
+    return c.TranslationEnabled
 }
 
 // Load is kept for backward compatibility but deprecated
@@ -270,6 +276,23 @@ func getDBSSLMode(env string) string {
     return mode
 }
 
-func (c *Config) IsTranslationEnabled() bool {
-    return c.TranslationEnabled
+// loadEnvFile tries to find and load .env from multiple possible paths
+func loadEnvFile() error {
+    // Try multiple paths to find .env file
+    possiblePaths := []string{
+        ".env",           // Current directory
+        "../.env",        // Parent directory  
+        "../../.env",     // Two levels up (for cmd/server)
+    }
+    
+    for _, path := range possiblePaths {
+        if _, err := os.Stat(path); err == nil {
+            fmt.Printf("Loading .env from: %s\n", path)
+            return godotenv.Load(path)
+        }
+    }
+    
+    fmt.Println("Warning: .env file not found in any expected location")
+    return fmt.Errorf(".env file not found")
 }
+

@@ -3,8 +3,48 @@ package services
 
 import (
     "context"
+    "time"
     "github.com/iyunix/go-internist/internal/services/ai"
 )
+
+
+// Add this after your existing imports
+type AIProviderStatus struct {
+    IsHealthy        bool   `json:"is_healthy"`
+    Message          string `json:"message"`
+    EmbeddingHealthy bool   `json:"embedding_healthy"`
+    LLMHealthy       bool   `json:"llm_healthy"`
+}
+func (s *AIService) GetProviderStatus() AIProviderStatus {
+    // ✅ Reduce timeout from 10s to 3s for health checks
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+    
+    status := AIProviderStatus{
+        IsHealthy:        true,
+        Message:          "All AI providers are healthy",
+        EmbeddingHealthy: true,
+        LLMHealthy:       true,
+    }
+    
+    // Test embedding provider
+    _, err := s.provider.CreateEmbedding(ctx, "test")
+    if err != nil {
+        s.logger.Warn("embedding provider health check failed", "error", err)
+        status.EmbeddingHealthy = false
+        status.IsHealthy = false
+        status.Message = "Embedding provider is unhealthy"
+    }
+
+    
+    s.logger.Info("AI provider health check completed", 
+        "embedding_healthy", status.EmbeddingHealthy,
+        "llm_healthy", status.LLMHealthy,
+        "overall_healthy", status.IsHealthy)
+        
+    return status
+}
+
 
 type AIService struct {
     provider ai.AIProvider

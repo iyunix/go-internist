@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"log"
+	"os"
 	"net/http"
     "path/filepath"
 	"strconv"
@@ -50,25 +51,26 @@ type RenderedMessage struct {
 }
 
 func loadTemplates() {
-	const templateDir = "web/templates"
-	const layoutFile = "layout.html"
-	const partialsDir = "web/templates/partials"
-	templates = make(map[string]*template.Template)
+    templateDir := findTemplateDir()
+    layoutFile := "layout.html"
+    partialsDir := filepath.Join(templateDir, "partials")
+    
+    templates = make(map[string]*template.Template)
 
-	partials, err := filepath.Glob(filepath.Join(partialsDir, "*.html"))
-	if err != nil {
-		log.Printf("Warning: could not find partial templates: %v", err)
-	}
+    partials, err := filepath.Glob(filepath.Join(partialsDir, "*.html"))
+    if err != nil {
+        log.Printf("Warning: could not find partial templates: %v", err)
+    }
 
-	pages, err := filepath.Glob(filepath.Join(templateDir, "*.html"))
-	if err != nil {
-		log.Fatalf("Error finding page templates: %v", err)
-	}
-	if len(pages) == 0 {
-		log.Fatalf("No page templates found in %s directory", templateDir)
-	}
-	
-	layoutPath := filepath.Join(templateDir, layoutFile)
+    pages, err := filepath.Glob(filepath.Join(templateDir, "*.html"))
+    if err != nil {
+        log.Fatalf("Error finding page templates: %v", err)
+    }
+    if len(pages) == 0 {
+        log.Fatalf("No page templates found in %s directory", templateDir)
+    }
+    
+    layoutPath := filepath.Join(templateDir, layoutFile)
 
 	for _, pagePath := range pages {
 		filename := filepath.Base(pagePath)
@@ -231,4 +233,25 @@ func (h *PageHandler) ShowErrorPage(w http.ResponseWriter, code, message, descri
 		"Description": description,
 	}
 	RenderTemplate(w, "error.html", data)
+}
+
+
+// findTemplateDir looks for web/templates in multiple possible locations
+func findTemplateDir() string {
+    possiblePaths := []string{
+        "web/templates",           // Current directory
+        "../web/templates",        // Parent directory  
+        "../../web/templates",     // Two levels up (for cmd/server)
+    }
+    
+    for _, path := range possiblePaths {
+        if _, err := os.Stat(path); err == nil {
+            log.Printf("Found templates directory at: %s", path)
+            return path
+        }
+    }
+    
+    // Fallback to default
+    log.Printf("Warning: using fallback template path - templates may not load")
+    return "web/templates"
 }
