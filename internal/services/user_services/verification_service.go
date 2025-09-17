@@ -318,6 +318,16 @@ func (s *VerificationService) VerifyAndResetPassword(ctx context.Context, phone,
 
     user.Password = string(hashedPassword)
 
+
+    // --- Add this block to verify user if not already ---
+    if !user.IsVerified {
+        user.IsVerified = true
+        user.Status = domain.UserStatusActive
+        now := time.Now()
+        user.VerifiedAt = &now
+    }
+    // ---------------------------------------------------
+
     if err := s.userRepo.Update(ctx, user); err != nil {
         s.logger.Error("failed to save new password", "error", err, "user_id", user.ID)
         return errors.New("failed to update password")
