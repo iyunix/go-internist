@@ -1,4 +1,4 @@
-// File: internal/services/chat_service.go
+// G:\go_internist\internal\services\chat_service.go
 package services
 
 import (
@@ -75,7 +75,6 @@ func (cb *SimpleCircuitBreaker) Call(fn func() error) error {
     if err != nil {
         cb.failures++
         cb.lastFailTime = time.Now()
-        
         if cb.failures >= cb.maxFailures {
             cb.state = "open"
         }
@@ -87,7 +86,6 @@ func (cb *SimpleCircuitBreaker) Call(fn func() error) error {
         cb.failures = 0
         cb.state = "closed"
     }
-
     return nil
 }
 
@@ -99,9 +97,9 @@ func (cb *SimpleCircuitBreaker) GetState() string {
 
 // WarmupTracker keeps track of API warm-up state
 type WarmupTracker struct {
-    mu              sync.RWMutex
-    services        map[string]bool
-    firstCallTimes  map[string]time.Time
+    mu             sync.RWMutex
+    services       map[string]bool
+    firstCallTimes map[string]time.Time
 }
 
 func NewWarmupTracker() *WarmupTracker {
@@ -132,17 +130,17 @@ func (w *WarmupTracker) SetFirstCallTime(serviceName string, t time.Time) {
 }
 
 type ChatService struct {
-    config              *chatservice.Config
-    chatRepo            chat.ChatRepository
-    messageRepo         message.MessageRepository
-    streamService       *chatservice.StreamingService
-    translationService  *TranslationService
-    logger              Logger
+    config             *chatservice.Config
+    chatRepo           chat.ChatRepository
+    messageRepo        message.MessageRepository
+    streamService      *chatservice.StreamingService
+    translationService *TranslationService
+    logger             Logger
     
     // Performance & Resilience
-    timeouts            *ServiceTimeouts
-    circuitBreakers     map[string]*SimpleCircuitBreaker
-    warmupTracker       *WarmupTracker
+    timeouts           *ServiceTimeouts
+    circuitBreakers    map[string]*SimpleCircuitBreaker
+    warmupTracker      *WarmupTracker
 }
 
 func NewChatService(
@@ -152,6 +150,7 @@ func NewChatService(
     pineconeService *PineconeService,
     retrievalTopK int,
     appConfig *config.Config,
+    translationService *TranslationService, // <--- Only injected!
 ) (*ChatService, error) {
     if chatRepo == nil || messageRepo == nil || aiService == nil || pineconeService == nil {
         return nil, errors.New("all dependencies are required for ChatService")
@@ -179,22 +178,9 @@ func NewChatService(
         "llm":         NewSimpleCircuitBreaker("llm", 3, 30*time.Second),
     }
 
-    // Initialize translation service if enabled
-    var translationService *TranslationService
-    if appConfig.IsTranslationEnabled() {
-        // Use the standard NewTranslationService function
-        translationService = NewTranslationService("avalai", appConfig.AvalaiAPIKeyTranslation, logger)
-        logger.Info("Translation service initialized with performance optimizations",
-            "timeout", timeouts.Translation)
-    } else {
-        logger.Info("Translation service disabled")
-    }
-
     // Initialize other services with standard constructors
     ragService := chatservice.NewRAGService(config, logger)
     sourceExtractor := chatservice.NewSourceExtractor(config, logger)
-    
-    // Use the standard NewStreamingService function
     streamService := chatservice.NewStreamingService(
         config, chatRepo, messageRepo, aiService, pineconeService,
         ragService, sourceExtractor, logger,
@@ -205,7 +191,7 @@ func NewChatService(
         chatRepo:           chatRepo,
         messageRepo:        messageRepo,
         streamService:      streamService,
-        translationService: translationService,
+        translationService: translationService, // <--- Only set once!
         logger:             logger,
         timeouts:           timeouts,
         circuitBreakers:    circuitBreakers,
@@ -226,38 +212,38 @@ func (s *ChatService) StreamChatMessageWithSources(
         "user_id", userID, "chat_id", chatID, "prompt_length", len(prompt))
 
     processedPrompt := prompt
-    
+
     // Smart translation logic with circuit breaker and timeout
     if s.translationService != nil {
         if s.translationService.NeedsTranslation(prompt) {
             onStatus("translating", "Processing text for optimal search...")
-            
+
             // Check circuit breaker state
             translationCB := s.circuitBreakers["translation"]
             if translationCB.GetState() == "open" {
-                s.logger.Warn("Translation circuit breaker is open, skipping translation")
-                onStatus("translation_skipped", "Translation service unavailable, proceeding with original text")
+                s.logger.Warn("Translation circuit breaker is open; breaking sequence!")
+                onStatus("translation_skipped", "Translation service unavailable. Please try again later.")
+                return errors.New("translation service unavailable (circuit breaker open)") // Sequence break
             } else {
                 // Execute translation with circuit breaker protection
                 err := translationCB.Call(func() error {
                     // Create timeout context for translation
                     timeoutCtx, cancel := context.WithTimeout(ctx, s.timeouts.Translation)
                     defer cancel()
-                    
+
                     translated, err := s.translationService.TranslateToEnglish(timeoutCtx, prompt)
                     if err != nil {
-                        return err  // ✅ Return error directly
+                        return err  // Return error directly
                     }
                     processedPrompt = translated
                     return nil
                 })
 
-                
                 if err != nil {
                     s.logger.Warn("Translation failed with circuit breaker protection", 
-                        "error", err,
-                        "circuit_state", translationCB.GetState())
-                    onStatus("translation_failed", "Translation failed, proceeding with original text")
+                        "error", err, "circuit_state", translationCB.GetState())
+                    onStatus("translation_failed", "Translation failed. Please try again later.")
+                    return err // <---- THIS BREAKS THE SEQUENCE IMMEDIATELY!
                 } else {
                     s.logger.Info("Text processed for better search", 
                         "original_length", len(prompt), 

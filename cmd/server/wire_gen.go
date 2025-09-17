@@ -49,7 +49,8 @@ func InitializeApplication(cfg *config.Config, logger services.Logger, db *gorm.
 		return nil, err
 	}
 	int2 := ProvideRetrievalTopK(cfg)
-	chatService, err := services.NewChatService(chatRepository, messageRepository, aiService, pineconeService, int2, cfg)
+	translationService := ProvideTranslationService(cfg, logger)
+	chatService, err := services.NewChatService(chatRepository, messageRepository, aiService, pineconeService, int2, cfg, translationService)
 	if err != nil {
 		return nil, err
 	}
@@ -183,4 +184,8 @@ func ProvidePineconeService(cfg *config.Config, logger services.Logger) (*servic
 		cfg.PineconeNamespace,
 		logger,
 	)
+}
+
+func ProvideTranslationService(cfg *config.Config, logger services.Logger) *services.TranslationService {
+	return services.NewTranslationService(cfg.AvalaiAPIKeyTranslation, "", logger)
 }

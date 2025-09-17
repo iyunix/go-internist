@@ -134,6 +134,7 @@ func InitializeApplication(cfg *config.Config, logger services.Logger, db *gorm.
         ProvideRetrievalTopK,
         ProvideUserServicesLogger,
         ProvideAdminServicesLogger,
+        ProvideTranslationService,
         
         // AI Configuration
         ProvideAIConfig,
@@ -176,4 +177,8 @@ func InitializeApplication(cfg *config.Config, logger services.Logger, db *gorm.
         wire.Struct(new(Application), "*"),
     )
     return &Application{}, nil
+}
+
+func ProvideTranslationService(cfg *config.Config, logger services.Logger) *services.TranslationService {
+    return services.NewTranslationService(cfg.AvalaiAPIKeyTranslation, "", logger)
 }
