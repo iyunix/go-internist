@@ -1,1 +1,11 @@
+# Dependencies
+/node_modules
+/vendor
+
+# Build files
+*.exe
+*.out
+app
+
+# Environment
 .env
