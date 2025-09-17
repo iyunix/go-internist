@@ -138,8 +138,11 @@ func (h *PageHandler) ShowRegisterPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *PageHandler) ShowVerifySMSPage(w http.ResponseWriter, r *http.Request) {
 	phone := r.URL.Query().Get("phone")
+	action := r.URL.Query().Get("action") // <-- ADD THIS LINE
+
 	data := map[string]interface{}{
 		"PhoneNumber": phone,
+		"Action":      action, // <-- AND PASS IT HERE
 	}
 	RenderTemplate(w, "verify_sms.html", data)
 }

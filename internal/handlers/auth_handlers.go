@@ -8,14 +8,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
+	"fmt"
+    "math/rand"
+    "golang.org/x/crypto/bcrypt"
 	"github.com/iyunix/go-internist/internal/services"
 	"github.com/iyunix/go-internist/internal/services/user_services"
 )
 
 var (
 	usernameRegex     = regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
-	phoneRegex        = regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+	phoneRegex        = regexp.MustCompile(`^09\d{9}$`)
 	passwordMinLength = 8
 )
 
@@ -80,32 +82,50 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/chat", http.StatusSeeOther)
 }
 
-// Register new user
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	username := r.FormValue("username")
-	phone := r.FormValue("phone_number")
-	validatedUsername, validatedPhone, password, errMsg := validateInput(username, phone, r.FormValue("password"))
-	if errMsg != "" {
-		data := map[string]interface{}{"Error": errMsg, "Username": validatedUsername, "PhoneNumber": validatedPhone}
-		RenderTemplate(w, "register.html", data)
-		return
-	}
-	user, err := h.AuthService.Register(r.Context(), validatedUsername, validatedPhone, password)
-	if err != nil {
-		log.Printf("Failed to register user: %v", err)
-		data := map[string]interface{}{"Error": err.Error(), "Username": validatedUsername, "PhoneNumber": validatedPhone}
-		RenderTemplate(w, "register.html", data)
-		return
-	}
-	if err := h.VerificationService.SendVerificationCode(r.Context(), user.ID); err != nil {
-		log.Printf("Failed to send verification code: %v", err)
-		data := map[string]interface{}{"Error": err.Error()}
-		RenderTemplate(w, "register.html", data)
-		return
-	}
-	http.Redirect(w, r, "/verify-sms?phone="+validatedPhone, http.StatusSeeOther)
+
+type PendingRegistration struct {
+    Username string
+    Phone    string
+    Password string // store as hash!
+    Code     string
+    Expires  time.Time
 }
+var pendingRegistrations = make(map[string]*PendingRegistration)
+
+
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+    r.ParseForm()
+    username := r.FormValue("username")
+    phone := r.FormValue("phone_number")
+    password := r.FormValue("password")
+    _, validatedPhone, validPassword, errMsg := validateInput(username, phone, password)
+    if errMsg != "" {
+        data := map[string]interface{}{"Error": errMsg, "Username": username, "PhoneNumber": validatedPhone}
+        RenderTemplate(w, "register.html", data)
+        return
+    }
+    // Check if user already exists!
+    existingUser, err := h.UserService.GetUserByPhone(r.Context(), validatedPhone)
+    if err == nil && existingUser != nil {
+        data := map[string]interface{}{"Error": "User already exists.", "Username": username, "PhoneNumber": validatedPhone}
+        RenderTemplate(w, "register.html", data)
+        return
+    }
+    hash, _ := bcrypt.GenerateFromPassword([]byte(validPassword), bcrypt.DefaultCost)
+    code := generate6DigitCode()
+    pendingRegistrations[validatedPhone] = &PendingRegistration{
+        Username: username, Phone: validatedPhone, Password: string(hash),
+        Code: code, Expires: time.Now().Add(15 * time.Minute),
+    }
+    h.SMSService.SendVerificationCode(r.Context(), validatedPhone, code)
+    http.Redirect(w, r, "/verify-sms?phone="+validatedPhone, http.StatusSeeOther)
+}
+
+func generate6DigitCode() string {
+    return fmt.Sprintf("%06d", rand.Intn(1000000))
+}
+
+
 
 // Forgot password: always redirect to verification
 func (h *AuthHandler) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
@@ -123,42 +143,63 @@ func (h *AuthHandler) HandleForgotPassword(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/verify-sms?phone="+phone+"&action=reset", http.StatusSeeOther)
 }
 
-// VerifySMS for either registration or password reset
 func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
-		return
-	}
-	phone := r.FormValue("phone_number")
-	code := r.FormValue("sms_code")
-	action := r.URL.Query().Get("action")
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, "Invalid form data", http.StatusBadRequest)
+        return
+    }
+    phone := r.FormValue("phone_number")
+    code := r.FormValue("sms_code")
+    action := r.FormValue("action")
 
-	user, err := h.UserService.GetUserByPhone(r.Context(), phone)
-	if err != nil {
-		data := map[string]interface{}{"Error": "User not found or invalid phone number.", "PhoneNumber": phone}
-		RenderTemplate(w, "verify_sms.html", data)
-		return
-	}
+    if action == "reset" {
+        // Old password reset logic (as before)
+        user, err := h.UserService.GetUserByPhone(r.Context(), phone)
+        if err != nil {
+            data := map[string]interface{}{"Error": "User not found or invalid phone number.", "PhoneNumber": phone, "Action": action}
+            RenderTemplate(w, "verify_sms.html", data)
+            return
+        }
+        verificationErr := h.VerificationService.VerifyPasswordResetCode(r.Context(), user.ID, code)
+        if verificationErr != nil {
+            // handle error
+            data := map[string]interface{}{"Error": verificationErr.Error(), "PhoneNumber": phone, "Action": action}
+            RenderTemplate(w, "verify_sms.html", data)
+            return
+        }
+        http.Redirect(w, r, "/reset-password?phone="+phone+"&code="+code, http.StatusSeeOther)
+        return
+    }
 
-	var verificationErr error
-	if action == "reset" {
-		verificationErr = h.VerificationService.VerifyPasswordResetCode(r.Context(), user.ID, code)
-	} else {
-		verificationErr = h.VerificationService.VerifyCode(r.Context(), user.ID, code)
-	}
-	if verificationErr != nil {
-		log.Printf("Verification error for action '%s': %v", action, verificationErr)
-		data := map[string]interface{}{"Error": verificationErr.Error(), "PhoneNumber": phone}
-		RenderTemplate(w, "verify_sms.html", data)
-		return
-	}
-
-	if action == "reset" {
-		http.Redirect(w, r, "/reset-password?phone="+phone+"&code="+code, http.StatusSeeOther)
-	} else {
-		http.Redirect(w, r, "/login?verified=true", http.StatusSeeOther)
-	}
+    // ---- Registration flow: Only use pendingRegistrations, don't look up DB user ----
+    pend, ok := pendingRegistrations[phone]
+    if !ok || time.Now().After(pend.Expires) {
+        data := map[string]interface{}{"Error": "Verification expired or not found.", "PhoneNumber": phone}
+        RenderTemplate(w, "verify_sms.html", data)
+        return
+    }
+    if pend.Code != code {
+        data := map[string]interface{}{"Error": "Invalid verification code.", "PhoneNumber": phone}
+        RenderTemplate(w, "verify_sms.html", data)
+        return
+    }
+    // Actually create DB user
+    user, err := h.AuthService.Register(r.Context(), pend.Username, pend.Phone, pend.Password)
+    if err != nil {
+        delete(pendingRegistrations, phone)
+        data := map[string]interface{}{"Error": "Failed to create user.", "PhoneNumber": phone}
+        RenderTemplate(w, "verify_sms.html", data)
+        return
+    }
+    user.IsVerified = true
+    user.Status = "active"
+    now := time.Now()
+    user.VerifiedAt = &now
+    h.UserService.UpdateUser(r.Context(), user)
+    delete(pendingRegistrations, phone)
+    http.Redirect(w, r, "/login?verified=true", http.StatusSeeOther)
 }
+
 
 // Reset password: final step
 func (h *AuthHandler) HandleResetPassword(w http.ResponseWriter, r *http.Request) {

@@ -32,6 +32,8 @@
         <form action="/verify-sms" class="mt-8 space-y-6" method="POST">
             <input type="hidden" name="sms_code" id="sms_code_hidden" required />
             <input type="hidden" name="phone_number" value="{{.PhoneNumber}}" />
+            <input type="hidden" name="action" value="{{.Action}}" />
+
             <div class="space-y-4">
                 <div class="flex justify-center space-x-2" id="otp-container">
                     <input class="otp-input h-14 w-12 rounded-md border-gray-300 bg-[#f1f5f9] text-center text-2xl font-semibold text-[#1e293b] focus:border-blue-600 focus:ring-blue-600" maxlength="1" type="text"/>

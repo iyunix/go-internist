@@ -1,14 +1,19 @@
-function validatePassword() {
-    const password = document.getElementById('password').value;
-    const confirmPasswordId = document.getElementById('confirm-password') ? 'confirm-password' : 'confirm_password';
-    const confirmPassword = document.getElementById(confirmPasswordId).value;
-    
-    if (password !== confirmPassword) {
-        alert("Passwords do not match.");
+// G:\go_internist\web\static\js\auth.js
+function isValidIranianPhone(phone) {
+    // Strict Iranian: starts with 09, 11 digits
+    return /^09\d{9}$/.test(phone);
+}
+
+function validateRegistrationForm() {
+    if (!validatePassword()) return false;
+
+    const phoneInput = document.getElementById('phone-number');
+    if (!isValidIranianPhone(phoneInput.value.trim())) {
+        alert("شماره موبایل باید مانند 09123456789 باشد.");
+        phoneInput.focus();
         return false;
     }
     return true;
 }
+window.validateRegistrationForm = validateRegistrationForm;
 
-// Make validatePassword available globally for onsubmit handlers
-window.validatePassword = validatePassword;

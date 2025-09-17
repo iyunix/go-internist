@@ -43,7 +43,7 @@ func (s *AuthService) Login(ctx context.Context, identifier, password string) (*
 
 	s.logger.Info("user login attempt", "identifier", identifier)
 
-	phoneRegex := regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+	phoneRegex := regexp.MustCompile(`^09\d{9}$`)
 	var userEntity *domain.User
 	var err error
 
@@ -82,50 +82,54 @@ func (s *AuthService) Login(ctx context.Context, identifier, password string) (*
 
 // Register a new user
 func (s *AuthService) Register(ctx context.Context, username, phone, password string) (*domain.User, error) {
-	if err := s.validateRegistrationInput(username, phone, password); err != nil {
-		s.logger.Warn("registration validation failed", "error", err.Error())
-		return nil, fmt.Errorf("validation failed: %w", err)
-	}
+    if err := s.validateRegistrationInput(username, phone, password); err != nil {
+        s.logger.Warn("registration validation failed", "error", err.Error())
+        return nil, fmt.Errorf("validation failed: %w", err)
+    }
 
-	s.logger.Info("user registration attempt", "username", username, "phone", phone)
+    s.logger.Info("user registration attempt", "username", username, "phone", phone)
 
-	existingUser, _ := s.userRepo.FindByPhone(ctx, phone)
-	if existingUser != nil {
-		s.logger.Warn("registration failed - phone already exists", "phone", phone)
-		return nil, errors.New("user with this phone number already exists")
-	}
-	existingUser, _ = s.userRepo.FindByUsername(ctx, username)
-	if existingUser != nil {
-		s.logger.Warn("registration failed - username already exists", "username", username)
-		return nil, errors.New("username already taken")
-	}
+    existingUser, _ := s.userRepo.FindByPhone(ctx, phone)
+    if existingUser != nil {
+        s.logger.Warn("registration failed - phone already exists", "phone", phone)
+        return nil, errors.New("user with this phone number already exists")
+    }
+    existingUser, _ = s.userRepo.FindByUsername(ctx, username)
+    if existingUser != nil {
+        s.logger.Warn("registration failed - username already exists", "username", username)
+        return nil, errors.New("username already taken")
+    }
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		s.logger.Error("password hashing failed", "error", err)
-		return nil, fmt.Errorf("failed to hash password: %w", err)
-	}
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+    if err != nil {
+        s.logger.Error("password hashing failed", "error", err)
+        return nil, fmt.Errorf("failed to hash password: %w", err)
+    }
 
-	userEntity := &domain.User{
-		Username:              username,
-		PhoneNumber:           phone,
-		Password:              string(hashedPassword),
-		IsAdmin:               phone == s.adminPhone,
-		SubscriptionPlan:      domain.PlanBasic,
-		CharacterBalance:      domain.PlanCredits[domain.PlanBasic],
-		TotalCharacterBalance: domain.PlanCredits[domain.PlanBasic],
-		Status:                domain.UserStatusPending,
-	}
+    now := time.Now()
+    userEntity := &domain.User{
+        Username:              username,
+        PhoneNumber:           phone,
+        Password:              string(hashedPassword),
+        IsAdmin:               phone == s.adminPhone,
+        SubscriptionPlan:      domain.PlanBasic,
+        CharacterBalance:      domain.PlanCredits[domain.PlanBasic],
+        TotalCharacterBalance: domain.PlanCredits[domain.PlanBasic],
+        Status:                domain.UserStatusActive,  // <--- changed from Pending to Active
+        IsVerified:            true,                     // <--- ensure verified!
+        VerifiedAt:            &now,                     // <--- mark time
+    }
 
-	createdUser, err := s.userRepo.Create(ctx, userEntity)
-	if err != nil {
-		s.logger.Error("user creation failed", "error", err)
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
+    createdUser, err := s.userRepo.Create(ctx, userEntity)
+    if err != nil {
+        s.logger.Error("user creation failed", "error", err)
+        return nil, fmt.Errorf("failed to create user: %w", err)
+    }
 
-	s.logger.Info("user registered successfully", "user_id", createdUser.ID)
-	return createdUser, nil
+    s.logger.Info("user registered successfully", "user_id", createdUser.ID)
+    return createdUser, nil
 }
+
 
 // Helper for validation
 func (s *AuthService) validateRegistrationInput(username, phone, password string) error {
@@ -133,7 +137,7 @@ func (s *AuthService) validateRegistrationInput(username, phone, password string
 	if !usernameRegex.MatchString(username) {
 		return errors.New("username must be 3-20 characters, alphanumeric or underscore")
 	}
-	phoneRegex := regexp.MustCompile(`^\+?[0-9]{7,15}$`)
+	phoneRegex := regexp.MustCompile(`^09\d{9}$`)
 	if !phoneRegex.MatchString(phone) {
 		return errors.New("invalid phone number format")
 	}
