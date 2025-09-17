@@ -1,16 +1,49 @@
-version: '3.8'
+# File: docker-compose.yml
 services:
+  app:
+    container_name: go_internist_app
+    # Tell Docker Compose to build using our new development Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    # This is the "live portal". It syncs your current directory (.) on your PC
+    # with the /app directory inside the container.
+    volumes:
+      - .:/app
+    environment:
+      # These variables are injected into the container for your app to use
+      - GO_ENV=development # Use this instead of APP_ENV to match your config.go
+      - DB_HOST=postgres
+      - DB_USER=internist
+      - DB_PASSWORD=medical_ai_2025
+      - DB_NAME=go_internist
+      - DB_PORT=5432
+      # Add ALL other required variables from your .env file here
+      - JWT_SECRET_KEY=A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0
+      - AVALAI_API_KEY_EMBEDDING=${AVALAI_API_KEY_EMBEDDING} # Reads from your local .env
+      - JABIR_API_KEY=${JABIR_API_KEY}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_INDEX_HOST=${PINECONE_INDEX_HOST}
+      - SMS_ACCESS_KEY=${SMS_ACCESS_KEY}
+      - SMS_API_URL=${SMS_API_URL}
+      - SMS_TEMPLATE_ID=512130
+      - ADMIN_PHONE_NUMBER=09371997640
+    depends_on:
+      - postgres
+
   postgres:
     image: postgres:15
     container_name: go_internist_db
     environment:
-      POSTGRES_DB: go_internist
-      POSTGRES_USER: internist
-      POSTGRES_PASSWORD: medical_ai_2025
-    ports:
-      - "5432:5432"
+      - POSTGRES_DB=go_internist
+      - POSTGRES_USER=internist
+      - POSTGRES_PASSWORD=medical_ai_2025
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports: # It can be useful to expose the port during dev for tools like DBeaver
+      - "5432:5432"
     restart: unless-stopped
 
 volumes:

@@ -1,0 +1,17 @@
+# File: .dockerignore
+
+# Ignore node_modules for faster builds
+node_modules
+
+# Ignore git repository files
+.git
+.gitignore
+
+# Ignore docker files themselves
+Dockerfile
+Dockerfile.dev
+docker-compose.yml
+
+# Ignore temporary build files from air
+tmp
+air.log

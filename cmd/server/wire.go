@@ -1,3 +1,4 @@
+// G:\go_internist\cmd\server\wire.go
 //go:build wireinject
 // +build wireinject
 
@@ -103,7 +104,7 @@ func ProvideSMSConfig(cfg *config.Config) *sms.Config {
         AccessKey:  cfg.SMSAccessKey,    // ✅ From config
         TemplateID: templateID,
         APIURL:     cfg.SMSAPIURL,       // ✅ From config
-        Timeout:    10 * time.Second,
+        Timeout:    30 * time.Second,
     }
 }
 
@@ -116,25 +117,23 @@ func ProvideSMSProvider(smsConfig *sms.Config) sms.Provider {
     return sms.NewSMSIRProvider(smsConfig)
 }
 
-func ProvidePineconeService(cfg *config.Config) (*services.PineconeService, error) {
+func ProvidePineconeService(cfg *config.Config, logger services.Logger) (*services.PineconeService, error) {
     return services.NewPineconeService(
         cfg.PineconeAPIKey,
         cfg.PineconeIndexHost,
         cfg.PineconeNamespace,
+        logger,
     )
 }
 
-// ✅ COMPLETE: Wire injector with all providers
-func InitializeApplication(db *gorm.DB) (*Application, error) {
+func InitializeApplication(cfg *config.Config, logger services.Logger, db *gorm.DB) (*Application, error) {
     wire.Build(
-        // Config and basic providers
-        ProvideConfig,
-        ProvideLogger,
+        // Basic providers
         ProvideJWTSecret,
         ProvideAdminPhone,
-        ProvideRetrievalTopK,        // ✅ NEW: For ChatService int parameter
-        ProvideUserServicesLogger,   // ✅ NEW: For BalanceService Logger
-        ProvideAdminServicesLogger,  // ✅ NEW: For AdminService Logger
+        ProvideRetrievalTopK,
+        ProvideUserServicesLogger,
+        ProvideAdminServicesLogger,
         
         // AI Configuration
         ProvideAIConfig,

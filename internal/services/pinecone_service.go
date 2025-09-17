@@ -15,30 +15,27 @@ type PineconeService struct {
     logger        Logger
 }
 
-func NewPineconeService(apiKey, indexHost, namespace string) (*PineconeService, error) {
-    // Create configuration with defaults
+func NewPineconeService(apiKey, indexHost, namespace string, logger Logger) (*PineconeService, error) {
     config := pinecone.DefaultConfig()
     config.APIKey = apiKey
     config.IndexHost = indexHost
     config.Namespace = namespace
-    
-    // Validate configuration
+
     if err := config.Validate(); err != nil {
         return nil, pinecone.NewConfigError(err.Error())
     }
-    
-    // Create logger
-    logger := &NoOpLogger{} // Will be replaced with production logger
-    
-    // Create modular components
+
+    // Use the logger passed to this constructor, not a NoOpLogger
+    // logger := prodLogger // <-- from DI or main.go
+
     clientService, err := pinecone.NewClientService(config, logger)
     if err != nil {
         return nil, err
     }
-    
+
     retryService := pinecone.NewRetryService(config, logger)
     vectorService := pinecone.NewVectorService(clientService, retryService, config, logger)
-    
+
     return &PineconeService{
         config:        config,
         clientService: clientService,
@@ -47,6 +44,7 @@ func NewPineconeService(apiKey, indexHost, namespace string) (*PineconeService, 
         logger:        logger,
     }, nil
 }
+
 
 // Vector Operations - UPDATE TYPE REFERENCES
 func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]any) error {
@@ -75,6 +73,7 @@ func (s *PineconeService) GetStatus(ctx context.Context) pinecone.ServiceStatus 
 }
 
 // Retry Operations
-func (s *PineconeService) RetryWithTimeout(call func(ctx context.Context) error) error {
-    return s.retryService.RetryWithTimeout(call)
+func (s *PineconeService) RetryWithTimeout(parentCtx context.Context, call func(ctx context.Context) error) error {
+    return s.retryService.RetryWithTimeout(parentCtx, call)
 }
+

@@ -54,16 +54,13 @@ type Config struct {
     TranslationEnabled bool
 }
 
-// New loads, parses, and validates the application configuration.
-// It is the single entrypoint for creating a valid config.
 func New() (*Config, error) {
-    env := getEnv("GO_ENV", "development")
+    // Load .env file if it exists. In Docker, it won't, and that's OK.
+    // godotenv.Load() is smart and won't overwrite existing environment variables.
+    // This makes it safe to use in all environments.
+    _ = godotenv.Load()
 
-    // Load .env file only in non-production environments
-    if env != "production" {
-        // Try to load .env from multiple possible locations
-        _ = loadEnvFile()
-    }
+    env := getEnv("GO_ENV", "development")
 
 
     cfg := &Config{
@@ -276,23 +273,4 @@ func getDBSSLMode(env string) string {
     return mode
 }
 
-// loadEnvFile tries to find and load .env from multiple possible paths
-func loadEnvFile() error {
-    // Try multiple paths to find .env file
-    possiblePaths := []string{
-        ".env",           // Current directory
-        "../.env",        // Parent directory  
-        "../../.env",     // Two levels up (for cmd/server)
-    }
-    
-    for _, path := range possiblePaths {
-        if _, err := os.Stat(path); err == nil {
-            fmt.Printf("Loading .env from: %s\n", path)
-            return godotenv.Load(path)
-        }
-    }
-    
-    fmt.Println("Warning: .env file not found in any expected location")
-    return fmt.Errorf(".env file not found")
-}
 

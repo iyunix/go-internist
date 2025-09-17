@@ -25,20 +25,14 @@ import (
 
 // Injectors from wire.go:
 
-// ✅ COMPLETE: Wire injector with all providers
-func InitializeApplication(db *gorm.DB) (*Application, error) {
-	config, err := ProvideConfig()
-	if err != nil {
-		return nil, err
-	}
-	logger := ProvideLogger()
+func InitializeApplication(cfg *config.Config, logger services.Logger, db *gorm.DB) (*Application, error) {
 	userRepository := user.NewGormUserRepository(db)
-	jwtSecret := ProvideJWTSecret(config)
-	adminPhone := ProvideAdminPhone(config)
+	jwtSecret := ProvideJWTSecret(cfg)
+	adminPhone := ProvideAdminPhone(cfg)
 	userService := NewUserServiceWrapped(userRepository, jwtSecret, adminPhone, logger)
 	authService := NewAuthServiceWrapped(userRepository, jwtSecret, adminPhone, logger)
 	verificationRepository := verification.NewGormVerificationRepository(db)
-	smsConfig := ProvideSMSConfig(config)
+	smsConfig := ProvideSMSConfig(cfg)
 	provider := ProvideSMSProvider(smsConfig)
 	smsService := services.NewSMSService(provider, logger)
 	verificationService := user_services.NewVerificationService(userRepository, verificationRepository, smsService, authService, logger)
@@ -47,15 +41,15 @@ func InitializeApplication(db *gorm.DB) (*Application, error) {
 	authHandler := handlers.NewAuthHandler(userService, authService, verificationService, smsService, balanceService)
 	chatRepository := chat.NewChatRepository(db)
 	messageRepository := message.NewMessageRepository(db)
-	aiConfig := ProvideAIConfig(config)
+	aiConfig := ProvideAIConfig(cfg)
 	aiProvider := ProvideAIProvider(aiConfig)
 	aiService := services.NewAIService(aiProvider, logger)
-	pineconeService, err := ProvidePineconeService(config)
+	pineconeService, err := ProvidePineconeService(cfg, logger)
 	if err != nil {
 		return nil, err
 	}
-	int2 := ProvideRetrievalTopK(config)
-	chatService, err := services.NewChatService(chatRepository, messageRepository, aiService, pineconeService, int2, config)
+	int2 := ProvideRetrievalTopK(cfg)
+	chatService, err := services.NewChatService(chatRepository, messageRepository, aiService, pineconeService, int2, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +62,7 @@ func InitializeApplication(db *gorm.DB) (*Application, error) {
 	pageHandler := handlers.NewPageHandler(userService, chatService, adminService)
 	adminHandler := handlers.NewAdminHandler(adminService)
 	application := &Application{
-		Config:              config,
+		Config:              cfg,
 		Logger:              logger,
 		AuthHandler:         authHandler,
 		ChatHandler:         chatHandler,
@@ -170,7 +164,7 @@ func ProvideSMSConfig(cfg *config.Config) *sms.Config {
 		AccessKey:  cfg.SMSAccessKey,
 		TemplateID: templateID,
 		APIURL:     cfg.SMSAPIURL,
-		Timeout:    10 * time.Second,
+		Timeout:    30 * time.Second,
 	}
 }
 
@@ -182,10 +176,11 @@ func ProvideSMSProvider(smsConfig *sms.Config) sms.Provider {
 	return sms.NewSMSIRProvider(smsConfig)
 }
 
-func ProvidePineconeService(cfg *config.Config) (*services.PineconeService, error) {
+func ProvidePineconeService(cfg *config.Config, logger services.Logger) (*services.PineconeService, error) {
 	return services.NewPineconeService(
 		cfg.PineconeAPIKey,
 		cfg.PineconeIndexHost,
 		cfg.PineconeNamespace,
+		logger,
 	)
 }

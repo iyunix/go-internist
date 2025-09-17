@@ -183,7 +183,7 @@ func NewChatService(
     var translationService *TranslationService
     if appConfig.IsTranslationEnabled() {
         // Use the standard NewTranslationService function
-        translationService = NewTranslationService(appConfig.AvalaiAPIKeyTranslation, logger)
+        translationService = NewTranslationService("avalai", appConfig.AvalaiAPIKeyTranslation, logger)
         logger.Info("Translation service initialized with performance optimizations",
             "timeout", timeouts.Translation)
     } else {

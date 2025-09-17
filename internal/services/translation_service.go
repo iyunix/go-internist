@@ -14,10 +14,11 @@ import (
 )
 
 type TranslationService struct {
-    apiKey  string
-    baseURL string
-    client  *http.Client
-    logger  Logger
+    apiKey      string
+    baseURL     string
+    model       string // NEW
+    client      *http.Client
+    logger      Logger
 }
 
 type TranslationRequest struct {
@@ -39,10 +40,14 @@ type TranslationResponse struct {
     } `json:"error,omitempty"`
 }
 
-func NewTranslationService(apiKey string, logger Logger) *TranslationService {
+func NewTranslationService(apiKey, model string, logger Logger) *TranslationService {
+    if model == "" {
+        model = "gemini-2.5-flash-lite"
+    }
     return &TranslationService{
-        apiKey:  apiKey,
+        apiKey: apiKey,
         baseURL: "https://api.avalai.ir/v1",
+        model: model,
         client: &http.Client{
             Timeout: 30 * time.Second,
         },
@@ -93,14 +98,13 @@ func (ts *TranslationService) NeedsTranslation(text string) bool {
     return true
 }
 
-// FIXED: Correct response parsing
 func (ts *TranslationService) TranslateToEnglish(ctx context.Context, text string) (string, error) {
     ts.logger.Info("Starting translation", "text", text)
-    
+
     prompt := fmt.Sprintf(`Translate this Persian medical text to clear English. Return only the English translation: %s`, text)
 
     reqBody := TranslationRequest{
-        Model: "gemini-2.5-flash-lite", // Using the working model from your test
+        Model: ts.model,
         Input: prompt,
     }
 
@@ -110,19 +114,41 @@ func (ts *TranslationService) TranslateToEnglish(ctx context.Context, text strin
         return "", fmt.Errorf("failed to marshal request: %w", err)
     }
 
-    req, err := http.NewRequestWithContext(ctx, "POST", ts.baseURL+"/responses", bytes.NewBuffer(jsonData))
-    if err != nil {
-        ts.logger.Error("Failed to create translation request", "error", err)
-        return "", fmt.Errorf("failed to create request: %w", err)
+    var resp *http.Response
+    maxRetries := 3
+    var lastErr error
+
+    for attempt := 1; attempt <= maxRetries; attempt++ {
+        req, err := http.NewRequestWithContext(ctx, "POST", ts.baseURL+"/responses", bytes.NewBuffer(jsonData))
+        if err != nil {
+            lastErr = err
+            ts.logger.Error("Failed to create translation request", "error", err)
+            break // unrecoverable
+        }
+
+        req.Header.Set("Content-Type", "application/json")
+        req.Header.Set("Authorization", "Bearer "+ts.apiKey)
+
+        resp, err = ts.client.Do(req)
+        if err != nil {
+            lastErr = err
+            ts.logger.Warn("Translation API call failed", "error", err, "attempt", attempt)
+        } else if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+            // retry for server errors
+            ts.logger.Warn("Translation API server error", "status_code", resp.StatusCode, "attempt", attempt)
+            resp.Body.Close() // always close to avoid leaks
+        } else {
+            // Success or client error—process or break
+            break
+        }
+
+        // Exponential backoff
+        time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
     }
 
-    req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("Authorization", "Bearer "+ts.apiKey)
-
-    resp, err := ts.client.Do(req)
-    if err != nil {
-        ts.logger.Error("Translation API call failed", "error", err)
-        return "", fmt.Errorf("failed to send request: %w", err)
+    if resp == nil {
+        ts.logger.Error("Translation API unreachable after retries", "error", lastErr)
+        return "", fmt.Errorf("request failed after %d attempts: %w", maxRetries, lastErr)
     }
     defer resp.Body.Close()
 

@@ -1,0 +1,25 @@
+# File: .air.toml
+
+# The root directory of the project
+root = "."
+# A temporary directory for the compiled binary
+tmp_dir = "tmp"
+
+[build]
+  # The command to build your application. It places the compiled binary in ./tmp/
+  cmd = "go build -o ./tmp/server ./cmd/server"
+  # The path to the binary that 'air' should run after a successful build
+  bin = "./tmp/server"
+  
+  # Watch for changes in files with these extensions
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  # Ignore these directories to prevent unwanted reloads
+  exclude_dir = ["tmp", "vendor", "node_modules"]
+
+[log]
+  # Show timestamps in the logs
+  time = true
+
+[misc]
+  # Delete the temporary binary when 'air' exits cleanly
+  clean_on_exit = true

@@ -1,0 +1,29 @@
+# File: Dockerfile.dev
+
+# CORRECTED: Use Go 1.25 to meet the requirements for 'air'
+FROM golang:1.25-alpine
+
+# --- NEW ---
+# Set the GOPROXY environment variable to use a potentially faster/more reliable proxy.
+# 'direct' is a fallback to download directly if the proxy fails.
+ENV GOPROXY=https://goproxy.cn,direct
+
+# Install the 'air' live-reloading tool
+RUN go install github.com/air-verse/air@latest
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy Go module files and download dependencies.
+# This is cached by Docker, so it only runs when you change go.mod or go.sum.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of your application's source code.
+COPY . .
+
+# Expose the port your application runs on
+EXPOSE 8080
+
+# The command to run when the container starts.
+CMD ["air"]
