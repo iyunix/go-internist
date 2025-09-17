@@ -193,7 +193,7 @@ func (h *PageHandler) ShowChatPage(w http.ResponseWriter, r *http.Request) {
 	var renderedMessages []RenderedMessage
 	if activeChatIDStr != "" {
 		activeChatID, _ = strconv.ParseUint(activeChatIDStr, 10, 64)
-		messages, err := h.ChatService.GetChatMessages(r.Context(), userID, uint(activeChatID))
+		messages, _, err := h.ChatService.GetChatMessagesWithPagination(r.Context(), userID, uint(activeChatID), 50, 0)
 		if err != nil {
 			log.Printf("Error fetching messages for chat %d: %v", activeChatID, err)
 		} else {

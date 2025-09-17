@@ -104,6 +104,18 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         RenderTemplate(w, "register.html", data)
         return
     }
+
+		// Check if username is already taken!
+	existingByUsername, err := h.UserService.GetUserByUsername(r.Context(), username)
+	if err == nil && existingByUsername != nil {
+		data := map[string]interface{}{
+			"Error":      "Username is already taken.",
+			"Username":   username,
+			"PhoneNumber": validatedPhone,
+		}
+		RenderTemplate(w, "register.html", data)
+		return
+	}
     // Check if user already exists!
     existingUser, err := h.UserService.GetUserByPhone(r.Context(), validatedPhone)
     if err == nil && existingUser != nil {
@@ -111,6 +123,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         RenderTemplate(w, "register.html", data)
         return
     }
+
+
     hash, _ := bcrypt.GenerateFromPassword([]byte(validPassword), bcrypt.DefaultCost)
     code := generate6DigitCode()
     pendingRegistrations[validatedPhone] = &PendingRegistration{

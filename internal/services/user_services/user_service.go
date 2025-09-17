@@ -27,6 +27,34 @@ func NewUserService(userRepo user.UserRepository, jwtSecretKey, adminPhone strin
     }
 }
 
+
+// GetUserByUsername retrieves a user by their username
+func (s *UserService) GetUserByUsername(ctx context.Context, username string) (*domain.User, error) {
+    if username == "" {
+        s.logger.Warn("user lookup attempted with empty username")
+        return nil, errors.New("username must be provided")
+    }
+
+    s.logger.Debug("retrieving user by username", "username", username)
+
+    user, err := s.userRepo.FindByUsername(ctx, username)
+    if err != nil {
+        s.logger.Error("failed to find user by username",
+            "error", err,
+            "username", username)
+        return nil, fmt.Errorf("failed to find user: %w", err)
+    }
+
+    s.logger.Debug("user retrieved successfully",
+        "user_id", user.ID,
+        "username", user.Username,
+        "is_verified", user.IsVerified,
+        "is_admin", user.IsAdmin)
+
+    return user, nil
+}
+
+
 // GetUserByID retrieves a user by their ID
 func (s *UserService) GetUserByID(ctx context.Context, userID uint) (*domain.User, error) {
     if userID == 0 {

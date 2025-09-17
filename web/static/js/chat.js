@@ -1,8 +1,56 @@
+// G:\go_internist\web\static\js\chat.js
 const currentUsername = window.INTERNIST_DATA?.currentUsername || "Unknown User";
 let activeChatID = window.INTERNIST_DATA?.activeChatID || 0;
 if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') { 
     console.error("CRITICAL ERROR: Libraries not loaded."); 
 }
+
+let messagePage = 1;
+const messageLimit = 50; // Or whatever page size you want
+let allMessagesLoaded = false;
+
+const loadOlderBtn = document.getElementById('load-older-btn');
+if (loadOlderBtn && activeChatID) {
+  loadOlderBtn.addEventListener('click', () => {
+    loadOlderMessages();
+  });
+}
+
+async function loadOlderMessages() {
+  if (allMessagesLoaded) return;
+
+  try {
+    // Increment page for older messages (or decrement if you're loading backwards)
+    messagePage += 1;
+    const response = await fetch(`/api/chats/${activeChatID}/messages?page=${messagePage}&limit=${messageLimit}`);
+    if (!response.ok) throw new Error("Failed to load messages.");
+
+    const data = await response.json();
+    if (data.messages.length === 0) {
+      allMessagesLoaded = true;
+      loadOlderBtn.disabled = true;
+      loadOlderBtn.textContent = "No more messages.";
+      return;
+    }
+
+    // Insert at the top of your message list (reverse order if needed)
+    data.messages.forEach(msg => {
+      const el = document.createElement('div');
+      el.innerHTML = `<div class="chat-message">${DOMPurify.sanitize(msg.content)}</div>`;
+      messageContainer.prepend(el.firstChild);
+    });
+
+    if (!data.has_more) {
+      allMessagesLoaded = true;
+      loadOlderBtn.disabled = true;
+      loadOlderBtn.textContent = "No more messages.";
+    }
+  } catch (err) {
+    console.error("Error loading older messages:", err);
+    alert("Failed to load older messages.");
+  }
+}
+
 
 const chatForm = document.getElementById('chat-form');
 const messageInput = document.getElementById('message-input');
@@ -282,3 +330,21 @@ async function exportMessageAsPDF(messageHTML) {
         alert('Could not generate PDF.'); 
     }
 }
+
+
+// Sidebar toggle logic for mobile
+document.addEventListener('DOMContentLoaded', function() {
+  const sidebar = document.getElementById('sidebar');
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+  sidebarToggle?.addEventListener('click', () => {
+    sidebar.classList.toggle('-translate-x-full');
+    sidebarOverlay.classList.toggle('hidden');
+  });
+
+  sidebarOverlay?.addEventListener('click', () => {
+    sidebar.classList.add('-translate-x-full');
+    sidebarOverlay.classList.add('hidden');
+  });
+});

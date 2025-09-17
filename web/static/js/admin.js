@@ -1,3 +1,4 @@
+// G:\go_internist\web\static\js\admin.js
 // --- DOM Elements ---
 const searchInput = document.getElementById('search-input');
 const userTableBody = document.getElementById('user-table-body');

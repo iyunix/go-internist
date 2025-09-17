@@ -317,17 +317,18 @@ func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string)
 }
 
 // GetChatMessages retrieves messages with timeout protection
-func (s *ChatService) GetChatMessages(ctx context.Context, userID, chatID uint) ([]domain.Message, error) {
-    // Add timeout for database operations
+func (s *ChatService) GetChatMessagesWithPagination(ctx context.Context, userID, chatID uint, limit, offset int) ([]domain.Message, int64, error) {
     dbCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
     defer cancel()
-    
+
     chatRecord, err := s.chatRepo.FindByID(dbCtx, chatID)
     if err != nil || chatRecord.UserID != userID {
-        return nil, errors.New("unauthorized or chat not found")
+        return nil, 0, errors.New("unauthorized or chat not found")
     }
-    return s.messageRepo.FindByChatID(dbCtx, chatID)
+    // Always fetch paginated
+    return s.messageRepo.FindByChatIDWithPagination(dbCtx, chatID, limit, offset)
 }
+
 
 // DeleteChat deletes a chat with proper cleanup and timeout
 func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error {

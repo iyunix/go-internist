@@ -394,7 +394,9 @@ func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
     ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
     defer cancel()
 
-    messages, err := h.ChatService.GetChatMessages(ctx, userID, chatID)
+    offset := (page - 1) * limit
+
+    messages, total, err := h.ChatService.GetChatMessagesWithPagination(ctx, userID, chatID, limit, offset)
     if err != nil {
         log.Printf("[ChatHandler] Error getting messages for user %d chat %d: %v", userID, chatID, err)
         http.Error(w, "Failed to get messages", http.StatusInternalServerError)
@@ -411,15 +413,17 @@ func (h *ChatHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Cache-Control", "no-store")
     
     response := map[string]interface{}{
-        "messages":      messages,
-        "total":         len(messages),
-        "chatId":        chatID,
-        "page":          page,
-        "limit":         limit,
-        "messageType":   messageType,
-        "timestamp":     time.Now().Unix(),
-        "userId":        userID,
+        "messages":     messages,
+        "total":        total,
+        "chatId":       chatID,
+        "page":         page,
+        "limit":        limit,
+        "messageType":  messageType,
+        "timestamp":    time.Now().Unix(),
+        "userId":       userID,
+        "has_more":     total > int64(offset+len(messages)), // Optional
     }
+
     
     if err := json.NewEncoder(w).Encode(response); err != nil {
         log.Printf("[ChatHandler] Error encoding messages response: %v", err)
