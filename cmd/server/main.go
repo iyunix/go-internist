@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json" // ✅ Added for health check JSON encoding
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -408,115 +407,109 @@ func setupRateLimiters() (*ratelimit.MemoryRateLimiter, *ratelimit.MemoryRateLim
 }
 
 func main() {
-	// Define a command-line flag for running migrations.
-	migrate := flag.Bool("migrate", false, "Run database migrations and exit")
-	flag.Parse() // Parse the flags
+    startTime := time.Now()
 
-	startTime := time.Now()
+    // Initialize logger first (still manual since it's used everywhere)
+    logger := services.NewLogger("go_internist")
+    logger.Info("🤖 Internist AI - Medical Chat Assistant starting")
 
-	// Initialize logger first (still manual since it's used everywhere)
-	logger := services.NewLogger("go_internist")
-	logger.Info("🤖 Internist AI - Medical Chat Assistant starting")
+    // Load and validate config in one clean step
+    cfg, err := config.New()
+    if err != nil {
+        logger.Error("FATAL: Configuration error", "error", err)
+        os.Exit(1)
+    }
+    logger.Info("configuration loaded successfully", "environment", cfg.Environment)
 
-	// Load and validate config in one clean step
-	cfg, err := config.New()
-	if err != nil {
-		logger.Error("FATAL: Configuration error", "error", err)
-		os.Exit(1)
-	}
-	logger.Info("configuration loaded successfully", "environment", cfg.Environment)
+    // Database Connection
+    logger.Info("initializing PostgreSQL database connection")
+    db, err := gorm.Open(postgres.Open(cfg.GetDatabaseDSN()), &gorm.Config{
+        NowFunc: func() time.Time {
+            return time.Now().UTC()
+        },
+    })
+    if err != nil {
+        logger.Error("PostgreSQL connection failed", "error", err,
+            "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName)
+        os.Exit(1)
+    }
 
-	// Database Connection
-	logger.Info("initializing PostgreSQL database connection")
-	db, err := gorm.Open(postgres.Open(cfg.GetDatabaseDSN()), &gorm.Config{
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
-	})
-	if err != nil {
-		logger.Error("PostgreSQL connection failed", "error", err,
-			"host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName)
-		os.Exit(1)
-	}
+    // Configure connection pool
+    sqlDB, err := configureDatabaseConnection(db)
+    if err != nil {
+        logger.Error("failed to configure database connection", "error", err)
+        os.Exit(1)
+    }
 
-	// Configure connection pool
-	sqlDB, err := configureDatabaseConnection(db)
-	if err != nil {
-		logger.Error("failed to configure database connection", "error", err)
-		os.Exit(1)
-	}
+    logger.Info("PostgreSQL connected successfully",
+        "host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName,
+        "max_idle_conns", 10, "max_open_conns", 100)
 
-	logger.Info("PostgreSQL connected successfully",
-		"host", cfg.DBHost, "port", cfg.DBPort, "database", cfg.DBName,
-		"max_idle_conns", 10, "max_open_conns", 100)
+    // ---- Run GORM migrations on every startup ----
+    if err := runDatabaseMigrations(db, logger); err != nil {
+        logger.Error("database migration failed", "error", err)
+        os.Exit(1)
+    }
+    logger.Info("database migrations completed successfully")
+    // ---- End migration block ----
 
-	// --- CORRECT PLACEMENT for MIGRATION LOGIC ---
-	// Now that we have a logger and a DB connection, we can check the flag.
-	if *migrate {
-		if err := runDatabaseMigrations(db, logger); err != nil {
-			os.Exit(1)
-		}
-		logger.Info("database migrations completed successfully on demand.")
-		os.Exit(0) // Exit cleanly after migrations are done.
-	}
+    // 🎯 WIRE MAGIC - Replace 50+ lines of manual DI with this single call!
+    logger.Info("initializing application with Wire dependency injection")
+    app, err := InitializeApplication(cfg, logger, db)
+    if err != nil {
+        logger.Error("application initialization failed", "error", err)
+        os.Exit(1)
+    }
+    logger.Info("🚀 application initialized successfully via Wire DI")
 
-	// 🎯 WIRE MAGIC - Replace 50+ lines of manual DI with this single call!
-	logger.Info("initializing application with Wire dependency injection")
-	app, err := InitializeApplication(cfg, logger, db)
-	if err != nil {
-		logger.Error("application initialization failed", "error", err)
-		os.Exit(1)
-	}
-	logger.Info("🚀 application initialized successfully via Wire DI")
+    // 🛡️ SETUP RATE LIMITERS — for login, register, SMS, reset
+    loginLimiter, registrationLimiter := setupRateLimiters()
+    logger.Info("🛡️ rate limiters initialized for auth endpoints")
 
-	// 🛡️ SETUP RATE LIMITERS — for login, register, SMS, reset
-	loginLimiter, registrationLimiter := setupRateLimiters()
-	logger.Info("🛡️ rate limiters initialized for auth endpoints")
+    // Router setup
+    logger.Info("configuring HTTP router and middleware")
+    r := mux.NewRouter()
 
-	// Router setup
-	logger.Info("configuring HTTP router and middleware")
-	r := mux.NewRouter()
+    // Create middleware instances
+    authMW := middleware.NewJWTMiddleware(app.AuthService, app.UserService, cfg.AdminPhoneNumber)
+    adminMW := middleware.RequireAdmin(app.UserRepo)
 
-	// Create middleware instances
-	authMW := middleware.NewJWTMiddleware(app.AuthService, app.UserService, cfg.AdminPhoneNumber)
-	adminMW := middleware.RequireAdmin(app.UserRepo)
+    // ✅ CORRECTED: Pass all required parameters
+    setupGlobalMiddleware(r, cfg)
+    setupStaticFiles(r, cfg)
+    setupPublicRoutes(r, app, sqlDB, loginLimiter, registrationLimiter)
+    setupProtectedRoutes(r, app, authMW)
+    setupAdminRoutes(r, app, authMW, adminMW)
+    setupErrorHandlers(r, app.PageHandler)
 
-	// ✅ CORRECTED: Pass all required parameters
-	setupGlobalMiddleware(r, cfg)                             // ✅ Pass cfg
-	setupStaticFiles(r, cfg)                                  // ✅ Pass cfg
-	setupPublicRoutes(r, app, sqlDB, loginLimiter, registrationLimiter) // ✅ Pass limiters + sqlDB
-	setupProtectedRoutes(r, app, authMW)
-	setupAdminRoutes(r, app, authMW, adminMW)
-	setupErrorHandlers(r, app.PageHandler)
+    logger.Info("HTTP routes configured successfully")
 
-	logger.Info("HTTP routes configured successfully")
+    // Server configuration
+    port := getServerPort(cfg)
+    srv := &http.Server{
+        Addr:           port,
+        Handler:        r,
+        ReadTimeout:    60 * time.Second,
+        WriteTimeout:   120 * time.Second, // Increased for chat streaming
+        IdleTimeout:    120 * time.Second,
+        MaxHeaderBytes: 1 << 20, // 1 MB
+    }
 
-	// Server configuration
-	port := getServerPort(cfg)
-	srv := &http.Server{
-		Addr:           port,
-		Handler:        r,
-		ReadTimeout:    60 * time.Second,
-		WriteTimeout:   120 * time.Second, // Increased for chat streaming
-		IdleTimeout:    120 * time.Second,
-		MaxHeaderBytes: 1 << 20, // 1 MB
-	}
+    initTime := time.Since(startTime)
+    logger.Info("🚀 server initialization completed",
+        "initialization_time", initTime.String(),
+        "port", port)
 
-	initTime := time.Since(startTime)
-	logger.Info("🚀 server initialization completed",
-		"initialization_time", initTime.String(),
-		"port", port)
+    logger.Info("==================================================")
+    logger.Info("🤖 Internist AI - Medical Chat Assistant", "status", "ready")
+    logger.Info("🚀 server starting", "port", port)
+    logger.Info("🌐 local access", "url", fmt.Sprintf("http://localhost%s", port))
+    logger.Info("💬 chat interface", "url", fmt.Sprintf("http://localhost%s/chat", port))
+    logger.Info("🔒 admin panel", "url", fmt.Sprintf("http://localhost%s/admin", port))
+    logger.Info("🔄 server ready to accept connections")
+    logger.Info("==================================================")
 
-	logger.Info("==================================================")
-	logger.Info("🤖 Internist AI - Medical Chat Assistant", "status", "ready")
-	logger.Info("🚀 server starting", "port", port)
-	logger.Info("🌐 local access", "url", fmt.Sprintf("http://localhost%s", port))
-	logger.Info("💬 chat interface", "url", fmt.Sprintf("http://localhost%s/chat", port))
-	logger.Info("🔒 admin panel", "url", fmt.Sprintf("http://localhost%s/admin", port))
-	logger.Info("🔄 server ready to accept connections")
-	logger.Info("==================================================")
-
-	// Start server and handle graceful shutdown
-	startServer(srv, logger)
-	gracefulShutdown(srv, sqlDB, logger, startTime)
+    // Start server and handle graceful shutdown
+    startServer(srv, logger)
+    gracefulShutdown(srv, sqlDB, logger, startTime)
 }
