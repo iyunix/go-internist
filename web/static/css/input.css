@@ -49,14 +49,11 @@
 
 /* 🚀 PERFECTED CHAT BUBBLE SIZING - Fixed Version */
 .message-content {
-  max-width: 75% !important;
-  width: fit-content !important;
-  display: inline-block !important;
-  overflow-wrap: break-word !important;
-  word-break: break-word !important;
-  padding: 0.75rem 1rem !important;
-  border-radius: 1rem !important;
-  box-sizing: border-box !important;
+  /* Let the bubble grow with its content */
+  width: fit-content;
+  max-width: 80%; /* A sensible default max-width */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* User messages - right aligned with proper width constraint */
@@ -74,30 +71,19 @@
 }
 
 /* Prose content within message bubbles */
-.message-content.prose,
-.message-content.prose-lg {
-  max-width: inherit !important;
+.message-content .prose {
+  max-width: 100%; /* Remove the prose max-width limit */
 }
 
 /* Force proper alignment for user message containers */
-.flex.flex-col.items-end {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: flex-end !important;
+.flex.flex-col.items-end .message-content {
+  margin-left: auto;
 }
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .message-content {
-    max-width: 85% !important;
-  }
-  
-  .flex.items-start.justify-end .message-content {
-    max-width: 80% !important;
-  }
-  
-  .flex.items-start.gap-3 .message-content {
-    max-width: 85% !important;
+    max-width: 90%;
   }
 }
 
@@ -120,5 +106,14 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (min-width: 640px) {
+  #sidebar.collapsed {
+    width: 4rem !important;
+  }
+  #sidebar.collapsed .sidebar-label {
+    display: none !important;
   }
 }

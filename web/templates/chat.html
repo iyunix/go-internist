@@ -2,36 +2,34 @@
 
 {{define "content"}}
 <div class="flex h-screen w-full bg-white font-sans">
-    <!-- Mobile sidebar toggle and overlay -->
-    <button id="sidebar-toggle"
-    class="fixed top-4 left-4 z-40 bg-[#13a4ec] text-white rounded-full p-2 focus:outline-none sm:hidden">
-    <span class="material-symbols-outlined">menu</span>
-    </button>
-    <div id="sidebar-overlay"
-    class="fixed inset-0 z-30 bg-black bg-opacity-40 hidden sm:hidden"></div>
-
+    <!-- Sidebar (left column) -->
     <aside id="sidebar"
-    class="fixed z-40 inset-y-0 left-0 w-64 flex flex-col border-r border-gray-200 bg-white transform -translate-x-full transition-transform duration-200 ease-in-out sm:relative sm:translate-x-0">
-        <div class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6">
-            <a href="/chat" class="flex items-center gap-3">
+        class="group fixed z-40 inset-y-0 left-0 w-64 flex flex-col border-r border-gray-200 bg-white transform -translate-x-full transition-transform duration-200 ease-in-out sm:relative sm:translate-x-0">
+        <!-- Header with Collapse Button -->
+        <div class="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-4">
+            <a href="/chat" class="flex items-center gap-3 sidebar-label">
                 <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#13a4ec] text-white">
                     <span class="material-symbols-outlined text-xl">health_and_safety</span>
                 </div>
                 <h1 class="text-xl font-bold text-[#1e293b]">Internist AI</h1>
             </a>
+            <!-- Collapse/Expand Button -->
+            <button id="sidebar-collapse-btn" class="hidden sm:block rounded-md p-2 hover:bg-gray-100" aria-label="Collapse sidebar">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
         </div>
         <div class="flex flex-1 flex-col overflow-y-auto p-4">
             <button id="new-chat-btn" class="mb-4 flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-[#1e293b] hover:bg-gray-100">
                 <span class="material-symbols-outlined text-lg">add</span>
-                New Chat
+                <span class="sidebar-label">New Chat</span>
             </button>
             <nav id="chat-list-container" class="flex flex-col">
-                <h2 class="mb-2 text-xs font-semibold uppercase text-[#64748b]">Previous Chats</h2>
+                <h2 class="mb-2 text-xs font-semibold uppercase text-[#64748b] sidebar-label">Previous Chats</h2>
                 {{range .Chats}}
                 <div class="group mt-1 flex items-center justify-between gap-3 rounded-md px-3 py-2 hover:bg-gray-100 {{if eq .ID $.ActiveChatID}}bg-gray-100{{end}}" data-chat-item-id="{{.ID}}">
                     <a class="flex items-center gap-3 truncate w-full" href="/chat?id={{.ID}}">
                         <span class="material-symbols-outlined text-lg text-[#64748b]">chat_bubble</span>
-                        <span class="truncate">{{.Title}}</span>
+                        <span class="truncate sidebar-label">{{.Title}}</span>
                     </a>
                     <button class="delete-chat-btn flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-gray-200 hover:text-gray-800"
                             data-chat-id="{{.ID}}"
@@ -42,7 +40,7 @@
                 {{end}}
             </nav>
         </div>
-        <div id="balance-container" class="border-t border-gray-200 p-4">
+        <div id="balance-container" class="border-t border-gray-200 p-4 sidebar-label">
             <div class="rounded-lg bg-gray-100 p-3">
                 <div class="flex justify-between text-xs font-medium text-[#64748b]">
                     <span>Credits Remaining</span>
@@ -54,8 +52,8 @@
             </div>
         </div>
     </aside>
-
-    <div class="flex h-screen w-full flex-col">
+    <!-- Main Chat Column (right column)-->
+    <div class="flex flex-col flex-1 min-w-0">
         <header class="flex h-16 shrink-0 items-center justify-end border-b border-gray-200 bg-white px-6">
             <div class="flex items-center gap-4">
                 <span class="text-sm font-medium text-gray-700">{{.User.Username}}</span>
@@ -66,10 +64,6 @@
         </header>
         <main class="flex flex-1 flex-col overflow-y-auto bg-[#f8fafc]">
             <div id="message-container" class="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-                <button id="load-older-btn" class="mb-4 rounded px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 w-full">
-                    Load Older Messages
-                </button>
-
                 <div class="space-y-8">
                     {{if not .Messages}}
                     <div class="text-center flex flex-col items-center gap-4 mt-16" id="welcome-message">
@@ -86,7 +80,9 @@
                             <div class="flex-1">
                                 <p class="text-sm font-medium text-[#64748b]">Internist AI</p>
                                 <div class="relative mt-1">
-                                    <div class="message-content prose prose-lg rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]">{{.RenderedContent}}</div>
+                                    <div class="message-content rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]">
+                                        <div class="prose prose-lg">{{.RenderedContent}}</div>
+                                    </div>
                                     <button onclick="exportMessageAsPDF(this.parentElement.querySelector('.message-content').innerHTML)" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-full shadow-sm hover:bg-gray-200">
                                         <span class="material-symbols-outlined text-base text-gray-600">picture_as_pdf</span>
                                     </button>
@@ -104,8 +100,8 @@
                     {{end}}
                 </div>
             </div>
-            <div class="sticky bottom-0 bg-[#f8fafc]/80 backdrop-blur-sm">
-                 <div class="mx-auto w-full max-w-4xl px-4 py-4 sm:px-6 lg:px-8">
+            <div class="sticky bottom-0 bg-[#f8fafc]/80 backdrop-blur-sm w-full max-w-4xl mx-auto">
+                <div class="px-4 py-4 sm:px-6 lg:px-8">
                     {{if gt .User.CharacterBalance 0}}
                         <form id="chat-form" class="relative">
                             <input id="message-input" class="w-full rounded-full border-gray-300 bg-[#f1f5f9] py-3 pl-5 pr-14 text-base text-[#1e293b] placeholder:text-[#64748b] focus:border-[#13a4ec] focus:ring-[#13a4ec]" placeholder="Type your message here..." type="text" autocomplete="off" />
