@@ -35,6 +35,9 @@ type MessageRepository interface {
 
 	// --- ADD THIS NEW METHOD ---
 	DeleteByChatID(ctx context.Context, chatID uint) error
+	FindRecentUserAndAssistantMessages(ctx context.Context, chatID uint, userLimit int) ([]domain.Message, *domain.Message, error)
+	FindRecentUserAndAssistantMessagesByType(ctx context.Context, chatID uint, userLimit int, userType string) ([]domain.Message, *domain.Message, error)
+
 }
 
 // Supporting types for enhanced functionality

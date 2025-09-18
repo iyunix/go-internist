@@ -608,6 +608,7 @@ func (r *gormMessageRepository) validateMessageType(messageType string) error {
     // Define allowed message types for medical AI
     allowedTypes := map[string]bool{
         "user":        true,
+        "user_en":     true,   // <<< Add this line!
         "assistant":   true,
         "system":      true,
         "medical_ai":  true,
@@ -670,4 +671,78 @@ func (r *gormMessageRepository) DeleteByChatID(ctx context.Context, chatID uint)
 
 	log.Printf("[MessageRepository] Deleted %d messages for chat %d", result.RowsAffected, chatID)
 	return nil
+}
+
+
+// Get recent N user questions (descending order, exclude current)
+// Get last assistant message (descending order)
+func (r *gormMessageRepository) FindRecentUserAndAssistantMessages(ctx context.Context, chatID uint, userLimit int) ([]domain.Message, *domain.Message, error) {
+	// 1. Most recent user messages (DESC: newest first)
+	var users []domain.Message
+	if err := r.db.WithContext(ctx).
+		Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeUser).
+		Order("created_at DESC").
+		Limit(userLimit).
+		Find(&users).Error; err != nil {
+		return nil, nil, err
+	}
+	// 2. Most recent assistant message (DESC, pick the newest only)
+	var assistants []domain.Message
+	if err := r.db.WithContext(ctx).
+		Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeAssistant).
+		Order("created_at DESC").
+		Limit(1).
+		Find(&assistants).Error; err != nil {
+		return users, nil, err
+	}
+	var lastAssistant *domain.Message
+	if len(assistants) > 0 {
+		lastAssistant = &assistants[0]
+	}
+
+	// (Optional) Reverse users slice: oldest to newest order
+	for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
+		users[i], users[j] = users[j], users[i]
+	}
+	return users, lastAssistant, nil
+}
+
+
+// Find recent user messages of a specific type (e.g., "user_en") plus last assistant message.
+func (r *gormMessageRepository) FindRecentUserAndAssistantMessagesByType(
+    ctx context.Context,
+    chatID uint,
+    userLimit int,
+    userType string,
+) ([]domain.Message, *domain.Message, error) {
+
+    // 1. Get recent user messages (of given type)
+    var users []domain.Message
+    if err := r.db.WithContext(ctx).
+        Where("chat_id = ? AND message_type = ?", chatID, userType).
+        Order("created_at DESC").
+        Limit(userLimit).
+        Find(&users).Error; err != nil {
+        return nil, nil, err
+    }
+
+    // 2. Last assistant (as before)
+    var assistants []domain.Message
+    if err := r.db.WithContext(ctx).
+        Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeAssistant).
+        Order("created_at DESC").
+        Limit(1).
+        Find(&assistants).Error; err != nil {
+        return users, nil, err
+    }
+    var lastAssistant *domain.Message
+    if len(assistants) > 0 {
+        lastAssistant = &assistants[0]
+    }
+
+    // Reverse user slice: oldest-to-newest
+    for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
+        users[i], users[j] = users[j], users[i]
+    }
+    return users, lastAssistant, nil
 }

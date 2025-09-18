@@ -200,104 +200,114 @@ func NewChatService(
 }
 
 func (s *ChatService) StreamChatMessageWithSources(
-    ctx context.Context,
-    userID, chatID uint,
-    prompt string,
-    onDelta func(string) error,
-    onSources func([]string),
-    onStatus func(status string, message string),
+	ctx context.Context,
+	userID, chatID uint,
+	prompt string,
+	onDelta func(string) error,
+	onSources func([]string),
+	onStatus func(status string, message string),
 ) error {
-    startTime := time.Now()
-    s.logger.Info("starting stream chat with performance monitoring", 
-        "user_id", userID, "chat_id", chatID, "prompt_length", len(prompt))
+	startTime := time.Now()
+	s.logger.Info("starting stream chat with performance monitoring",
+		"user_id", userID, "chat_id", chatID, "prompt_length", len(prompt))
 
-    processedPrompt := prompt
+	originalPrompt := prompt
+	processedPrompt := prompt
 
-    // Smart translation logic with circuit breaker and timeout
-    if s.translationService != nil {
-        if s.translationService.NeedsTranslation(prompt) {
-            onStatus("translating", "Processing text for optimal search...")
+	// --- Translation logic with circuit breaker ---
+	if s.translationService != nil && s.translationService.NeedsTranslation(prompt) {
+		onStatus("translating", "Processing text for optimal search...")
+		translationCB := s.circuitBreakers["translation"]
+		if translationCB.GetState() == "open" {
+			s.logger.Warn("Translation circuit breaker is open; skipping translation")
+			onStatus("translation_skipped", "Translation service unavailable")
+			return errors.New("translation service unavailable (circuit breaker open)")
+		}
 
-            // Check circuit breaker state
-            translationCB := s.circuitBreakers["translation"]
-            if translationCB.GetState() == "open" {
-                s.logger.Warn("Translation circuit breaker is open; breaking sequence!")
-                onStatus("translation_skipped", "Translation service unavailable. Please try again later.")
-                return errors.New("translation service unavailable (circuit breaker open)") // Sequence break
-            } else {
-                // Execute translation with circuit breaker protection
-                err := translationCB.Call(func() error {
-                    // Create timeout context for translation
-                    timeoutCtx, cancel := context.WithTimeout(ctx, s.timeouts.Translation)
-                    defer cancel()
+		err := translationCB.Call(func() error {
+			timeoutCtx, cancel := context.WithTimeout(ctx, s.timeouts.Translation)
+			defer cancel()
+			translated, err := s.translationService.TranslateToEnglish(timeoutCtx, prompt)
+			if err != nil {
+				return err
+			}
+			processedPrompt = translated
+			return nil
+		})
+		if err != nil {
+			s.logger.Warn("Translation failed", "error", err)
+			onStatus("translation_failed", "Translation failed")
+			return err
+		}
+		onStatus("translated", "Text optimized for search")
+	}
 
-                    translated, err := s.translationService.TranslateToEnglish(timeoutCtx, prompt)
-                    if err != nil {
-                        return err  // Return error directly
-                    }
-                    processedPrompt = translated
-                    return nil
-                })
+	// --- Save both original & translated messages ---
+	if originalPrompt != processedPrompt {
+		// Save original
+		_, _ = s.SaveMessage(ctx, userID, chatID, originalPrompt, "user")
+		// Save translated
+		_, _ = s.SaveMessage(ctx, userID, chatID, processedPrompt, "user_en")
+	} else {
+		// Save as normal if no translation
+		_, _ = s.SaveMessage(ctx, userID, chatID, processedPrompt, "user_en")
+	}
 
-                if err != nil {
-                    s.logger.Warn("Translation failed with circuit breaker protection", 
-                        "error", err, "circuit_state", translationCB.GetState())
-                    onStatus("translation_failed", "Translation failed. Please try again later.")
-                    return err // <---- THIS BREAKS THE SEQUENCE IMMEDIATELY!
-                } else {
-                    s.logger.Info("Text processed for better search", 
-                        "original_length", len(prompt), 
-                        "processed_length", len(processedPrompt),
-                        "translation_time", time.Since(startTime))
-                    onStatus("translated", "Text optimized for medical search")
-                }
-            }
-        } else {
-            s.logger.Debug("Text is purely English, no translation needed")
-        }
-    }
+	// ----- Build embedding & LLM windows using English version -----
+	const usersWindowSize = 7
+	users, lastAssistant, err := s.messageRepo.FindRecentUserAndAssistantMessagesByType(ctx, chatID, usersWindowSize, "user_en")
+	if err != nil || len(users) == 0 {
+		// Fallback to original if no translated messages
+		users, lastAssistant, _ = s.messageRepo.FindRecentUserAndAssistantMessagesByType(ctx, chatID, usersWindowSize, "user")
+	}
 
-    // Determine LLM timeout based on warm-up state
-    llmTimeout := s.timeouts.LLM
-    if !s.warmupTracker.IsWarmedUp("llm") {
-        llmTimeout = s.timeouts.WarmupLLM
-        s.warmupTracker.SetFirstCallTime("llm", time.Now())
-        s.logger.Info("Using extended timeout for LLM warm-up", 
-            "timeout", llmTimeout)
-        onStatus("warming_up", "Initializing AI model (first request may take longer)...")
-    }
+	// --- Embedding window: only previous user_en messages + current ---
+	var embeddingWindow []string
+	for _, u := range users {
+		embeddingWindow = append(embeddingWindow, u.Content)
+	}
+	embeddingWindow = append(embeddingWindow, processedPrompt)
+	embeddingText := strings.Join(embeddingWindow, "\n")
 
-    // Execute the main streaming response
-    err := s.streamService.StreamChatResponse(ctx, userID, chatID, processedPrompt, onDelta, onSources, onStatus)
+	// --- LLM window: previous user_en messages + last assistant + current ---
+	var llmWindow []string
+	for _, u := range users {
+		llmWindow = append(llmWindow, u.Content)
+	}
+	if lastAssistant != nil {
+		llmWindow = append(llmWindow, lastAssistant.Content)
+	}
+	llmWindow = append(llmWindow, processedPrompt)
+	llmText := strings.Join(llmWindow, "\n")
 
-    // Mark services as warmed up on successful completion
-    if err == nil {
-        s.warmupTracker.MarkWarmedUp("llm")
-        s.warmupTracker.MarkWarmedUp("embedding")
-        s.warmupTracker.MarkWarmedUp("pinecone")
-    }
+	// ----- Stream with separate embedding & LLM text -----
+	err = s.streamService.StreamChatResponse(
+		ctx,
+		userID,
+		chatID,
+		embeddingText, // for vector search/embedding
+		llmText,       // for LLM prompt
+		onDelta,
+		onSources,
+		onStatus,
+	)
 
-    totalTime := time.Since(startTime)
-    s.logger.Info("stream chat completed with performance metrics",
-        "user_id", userID,
-        "total_time", totalTime,
-        "error", err,
-        "warmup_state", map[string]bool{
-            "llm": s.warmupTracker.IsWarmedUp("llm"),
-            "embedding": s.warmupTracker.IsWarmedUp("embedding"),
-            "pinecone": s.warmupTracker.IsWarmedUp("pinecone"),
-        })
+	if err == nil {
+		s.warmupTracker.MarkWarmedUp("llm")
+		s.warmupTracker.MarkWarmedUp("embedding")
+		s.warmupTracker.MarkWarmedUp("pinecone")
+	}
 
-    // Performance alert for slow requests
-    if totalTime > 10*time.Second {
-        s.logger.Warn("PERFORMANCE_ALERT: Slow chat response detected",
-            "user_id", userID,
-            "total_time", totalTime,
-            "threshold", "10s")
-    }
+	s.logger.Info("stream chat completed",
+		"user_id", userID,
+		"total_time", time.Since(startTime),
+		"error", err)
 
-    return err
+	return err
 }
+
+
+
 
 // CreateChat creates a new chat with validation and timeout
 func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string) (*domain.Chat, error) {

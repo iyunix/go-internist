@@ -67,10 +67,12 @@ func NewStreamingService(
 }
 
 // StreamChatResponse orchestrates the full RAG pipeline with timeouts for each external call.
+// StreamChatResponse orchestrates the full RAG pipeline with separate embedding and LLM contexts.
 func (s *StreamingService) StreamChatResponse(
 	ctx context.Context,
 	userID, chatID uint,
-	prompt string,
+	embeddingText string, // ONLY previous user questions + current
+	llmText string,       // previous user questions + last assistant + current
 	onDelta func(string) error,
 	onSources func([]string),
 	onStatus func(status, message string),
@@ -78,16 +80,16 @@ func (s *StreamingService) StreamChatResponse(
 	s.logger.Info("starting stream chat", "user_id", userID, "chat_id", chatID)
 	onStatus("understanding", "Understanding question...")
 
-	// This database call is fast and uses the parent context's timeout.
+	// Validate chat ownership
 	chat, err := s.chatRepo.FindByID(ctx, chatID)
 	if err != nil || chat.UserID != userID {
 		return NewUnauthorizedError(userID, chatID)
 	}
 
-	// --- 1. Harden Embedding Call with a Timeout ---
+	// --- 1️⃣ Harden Embedding Call with a Timeout ---
 	embeddingCtx, embeddingCancel := context.WithTimeout(ctx, embeddingAPITimeout)
 	defer embeddingCancel()
-	embedding, err := s.aiService.CreateEmbedding(embeddingCtx, prompt)
+	embedding, err := s.aiService.CreateEmbedding(embeddingCtx, embeddingText) // ✅ use embeddingText
 	if err != nil {
 		s.logger.Error("embedding call failed", "error", err)
 		return NewRAGError("embedding", "failed to create embedding", err)
@@ -95,7 +97,7 @@ func (s *StreamingService) StreamChatResponse(
 
 	onStatus("searching", "Searching UpToDate knowledge base...")
 
-	// --- 2. Harden Pinecone Call with a Timeout ---
+	// --- 2️⃣ Harden Pinecone Call with a Timeout ---
 	pineconeCtx, pineconeCancel := context.WithTimeout(ctx, pineconeAPITimeout)
 	defer pineconeCancel()
 	matches, err := s.pineconeService.QuerySimilar(pineconeCtx, embedding, s.config.RetrievalTopK)
@@ -104,6 +106,7 @@ func (s *StreamingService) StreamChatResponse(
 		return NewRAGError("pinecone_query", "failed to query Pinecone", err)
 	}
 
+	// Send sources if configured
 	if s.config.EnableSources && onSources != nil {
 		sources := s.sourceExtractor.ExtractSources(matches)
 		if len(sources) > 0 {
@@ -111,11 +114,12 @@ func (s *StreamingService) StreamChatResponse(
 		}
 	}
 
-	contextJSON, entries := s.ragService.BuildContext(matches) // ✅ capture both
-	finalPrompt := s.ragService.BuildPrompt(contextJSON, prompt, entries) // ✅ pass all three
+	// Build final LLM prompt using llmText
+	contextJSON, entries := s.ragService.BuildContext(matches)
+	finalPrompt := s.ragService.BuildPrompt(contextJSON, llmText, entries) // ✅ use llmText
 	onStatus("thinking", "AI is generating a response...")
 
-	// --- 3. Harden LLM Stream Call with a Timeout ---
+	// --- 3️⃣ Harden LLM Stream Call with a Timeout ---
 	var fullReply strings.Builder
 	llmCtx, llmCancel := context.WithTimeout(ctx, llmStreamTimeout)
 	defer llmCancel()
@@ -129,10 +133,13 @@ func (s *StreamingService) StreamChatResponse(
 		return NewRAGError("streaming", "AI streaming failed", streamErr)
 	}
 
+	// Save assistant message in background
 	go s.saveAssistantMessage(chatID, fullReply.String())
+
 	s.logger.Info("stream chat completed", "response_length", fullReply.Len())
 	return nil
 }
+
 
 // saveUserMessage saves the user's message to the database.
 func (s *StreamingService) saveUserMessage(ctx context.Context, chatID uint, content string) error {
