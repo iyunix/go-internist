@@ -111,8 +111,8 @@ func (s *StreamingService) StreamChatResponse(
 		}
 	}
 
-	contextJSON := s.ragService.BuildContext(matches)
-	finalPrompt := s.ragService.BuildPrompt(contextJSON, prompt)
+	contextJSON, entries := s.ragService.BuildContext(matches) // ✅ capture both
+	finalPrompt := s.ragService.BuildPrompt(contextJSON, prompt, entries) // ✅ pass all three
 	onStatus("thinking", "AI is generating a response...")
 
 	// --- 3. Harden LLM Stream Call with a Timeout ---
