@@ -117,3 +117,37 @@
     display: none !important;
   }
 }
+
+
+/* Applicable on screens 640px and wider */
+@media (min-width: 640px) {
+    #sidebar {
+        /* Start collapsed */
+        width: 4rem; /* 64px */
+        transition: width 0.2s ease-in-out;
+    }
+
+    #sidebar:hover {
+        /* Expand on hover */
+        width: 16rem; /* 256px */
+    }
+
+    /* Hide labels by default inside the sidebar */
+    #sidebar .sidebar-label {
+        display: none;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    /* Show labels when the sidebar is hovered */
+    #sidebar:hover .sidebar-label {
+        display: inline; /* or block, flex, etc. */
+        opacity: 1;
+    }
+    
+    /* Ensure the collapse button is not part of the label logic */
+    #sidebar-collapse-btn .sidebar-label {
+        display: inline !important;
+        opacity: 1 !important;
+    }
+}

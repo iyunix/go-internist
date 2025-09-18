@@ -1,3 +1,4 @@
+// G:\go_internist\web\static\js\chat.js
 const currentUsername = window.INTERNIST_DATA?.currentUsername || "Unknown User";
 let activeChatID = window.INTERNIST_DATA?.activeChatID || 0;
 if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
@@ -109,41 +110,6 @@ document.addEventListener('DOMContentLoaded', function () {
         sidebarOverlay.classList.add('hidden');
     });
 
-    function isDesktop() {
-        return window.innerWidth >= 640;
-    }
-
-    function toggleDesktopCollapse() {
-        if (!isDesktop()) return;
-        sidebar.classList.toggle('collapsed');
-        const icon = sidebarCollapseBtn.querySelector('span');
-        if (sidebar.classList.contains('collapsed')) {
-            icon.textContent = 'menu';
-        } else {
-            icon.textContent = 'menu_open';
-        }
-    }
-
-    // Desktop: collapsed by default
-    if (isDesktop()) {
-        sidebar.classList.add('collapsed');
-        sidebarCollapseBtn.querySelector('span').textContent = 'menu';
-    }
-
-    sidebarCollapseBtn?.addEventListener('click', toggleDesktopCollapse);
-
-    window.addEventListener('resize', () => {
-        if (!isDesktop()) {
-            sidebar.classList.remove('collapsed');
-        } else {
-            const icon = sidebarCollapseBtn.querySelector('span');
-            if (sidebar.classList.contains('collapsed')) {
-                icon.textContent = 'menu';
-            } else {
-                icon.textContent = 'menu_open';
-            }
-        }
-    });
 });
 
 // Chat list sidebar logic and other UI

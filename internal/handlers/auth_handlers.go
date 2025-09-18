@@ -1,16 +1,18 @@
-// G:\go_internist\internal\handlers\auth_handlers.go
+// File: internal/handlers/auth_handlers.go
 package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
-	"fmt"
-    "math/rand"
-    "golang.org/x/crypto/bcrypt"
+
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/iyunix/go-internist/internal/services"
 	"github.com/iyunix/go-internist/internal/services/user_services"
 )
@@ -82,22 +84,21 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/chat", http.StatusSeeOther)
 }
 
-
 type PendingRegistration struct {
-    Username string
-    Phone    string
-    Password string // store as hash!
-    Code     string
-    Expires  time.Time
+	Username string
+	Phone    string
+    Password string // store as plain text just for verification duration
+	Code     string
+	Expires  time.Time
 }
+
 var pendingRegistrations = make(map[string]*PendingRegistration)
 
-
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-    r.ParseForm()
-    username := r.FormValue("username")
-    phone := r.FormValue("phone_number")
-    password := r.FormValue("password")
+	r.ParseForm()
+	username := r.FormValue("username")
+	phone := r.FormValue("phone_number")
+	password := r.FormValue("password")
     _, validatedPhone, validPassword, errMsg := validateInput(username, phone, password)
     if errMsg != "" {
         data := map[string]interface{}{"Error": errMsg, "Username": username, "PhoneNumber": validatedPhone}
@@ -105,7 +106,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-		// Check if username is already taken!
+	// Check if username is already taken!
 	existingByUsername, err := h.UserService.GetUserByUsername(r.Context(), username)
 	if err == nil && existingByUsername != nil {
 		data := map[string]interface{}{
@@ -116,30 +117,30 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		RenderTemplate(w, "register.html", data)
 		return
 	}
-    // Check if user already exists!
-    existingUser, err := h.UserService.GetUserByPhone(r.Context(), validatedPhone)
-    if err == nil && existingUser != nil {
-        data := map[string]interface{}{"Error": "User already exists.", "Username": username, "PhoneNumber": validatedPhone}
-        RenderTemplate(w, "register.html", data)
-        return
-    }
 
+	// Check if user already exists!
+	existingUser, err := h.UserService.GetUserByPhone(r.Context(), validatedPhone)
+	if err == nil && existingUser != nil {
+		data := map[string]interface{}{"Error": "User already exists.", "Username": username, "PhoneNumber": validatedPhone}
+		RenderTemplate(w, "register.html", data)
+		return
+	}
 
-    hash, _ := bcrypt.GenerateFromPassword([]byte(validPassword), bcrypt.DefaultCost)
     code := generate6DigitCode()
     pendingRegistrations[validatedPhone] = &PendingRegistration{
-        Username: username, Phone: validatedPhone, Password: string(hash),
-        Code: code, Expires: time.Now().Add(15 * time.Minute),
+        Username: username,
+        Phone:    validatedPhone,
+        Password: validPassword, // <-- store plaintext password
+        Code:     code,
+        Expires:  time.Now().Add(15 * time.Minute),
     }
     h.SMSService.SendVerificationCode(r.Context(), validatedPhone, code)
     http.Redirect(w, r, "/verify-sms?phone="+validatedPhone, http.StatusSeeOther)
 }
 
 func generate6DigitCode() string {
-    return fmt.Sprintf("%06d", rand.Intn(1000000))
+	return fmt.Sprintf("%06d", rand.Intn(1000000))
 }
-
-
 
 // Forgot password: always redirect to verification
 func (h *AuthHandler) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
@@ -166,26 +167,26 @@ func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
     code := r.FormValue("sms_code")
     action := r.FormValue("action")
 
-    if action == "reset" {
-        // Old password reset logic (as before)
-        user, err := h.UserService.GetUserByPhone(r.Context(), phone)
-        if err != nil {
-            data := map[string]interface{}{"Error": "User not found or invalid phone number.", "PhoneNumber": phone, "Action": action}
-            RenderTemplate(w, "verify_sms.html", data)
-            return
-        }
-        verificationErr := h.VerificationService.VerifyPasswordResetCode(r.Context(), user.ID, code)
-        if verificationErr != nil {
-            // handle error
-            data := map[string]interface{}{"Error": verificationErr.Error(), "PhoneNumber": phone, "Action": action}
-            RenderTemplate(w, "verify_sms.html", data)
-            return
-        }
-        http.Redirect(w, r, "/reset-password?phone="+phone+"&code="+code, http.StatusSeeOther)
-        return
-    }
+	if action == "reset" {
+		// Old password reset logic (as before)
+		user, err := h.UserService.GetUserByPhone(r.Context(), phone)
+		if err != nil {
+			data := map[string]interface{}{"Error": "User not found or invalid phone number.", "PhoneNumber": phone, "Action": action}
+			RenderTemplate(w, "verify_sms.html", data)
+			return
+		}
+		verificationErr := h.VerificationService.VerifyPasswordResetCode(r.Context(), user.ID, code)
+		if verificationErr != nil {
+			// handle error
+			data := map[string]interface{}{"Error": verificationErr.Error(), "PhoneNumber": phone, "Action": action}
+			RenderTemplate(w, "verify_sms.html", data)
+			return
+		}
+		http.Redirect(w, r, "/reset-password?phone="+phone+"&code="+code, http.StatusSeeOther)
+		return
+	}
 
-    // ---- Registration flow: Only use pendingRegistrations, don't look up DB user ----
+    // Registration flow
     pend, ok := pendingRegistrations[phone]
     if !ok || time.Now().After(pend.Expires) {
         data := map[string]interface{}{"Error": "Verification expired or not found.", "PhoneNumber": phone}
@@ -197,8 +198,9 @@ func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
         RenderTemplate(w, "verify_sms.html", data)
         return
     }
-    // Actually create DB user
-    user, err := h.AuthService.Register(r.Context(), pend.Username, pend.Phone, pend.Password)
+    // Hash password right before user creation
+    hash, _ := bcrypt.GenerateFromPassword([]byte(pend.Password), bcrypt.DefaultCost)
+    user, err := h.AuthService.Register(r.Context(), pend.Username, pend.Phone, string(hash))
     if err != nil {
         delete(pendingRegistrations, phone)
         data := map[string]interface{}{"Error": "Failed to create user.", "PhoneNumber": phone}
@@ -211,9 +213,24 @@ func (h *AuthHandler) VerifySMS(w http.ResponseWriter, r *http.Request) {
     user.VerifiedAt = &now
     h.UserService.UpdateUser(r.Context(), user)
     delete(pendingRegistrations, phone)
-    http.Redirect(w, r, "/login?verified=true", http.StatusSeeOther)
-}
 
+    // Auto-login with plain password (NOT hash!)
+    _, token, err := h.AuthService.Login(r.Context(), pend.Phone, pend.Password)
+    if err != nil {
+        http.Redirect(w, r, "/login?verified=true", http.StatusSeeOther)
+        return
+    }
+    http.SetCookie(w, &http.Cookie{
+        Name:     "auth_token",
+        Value:    token,
+        Expires:  time.Now().Add(24 * time.Hour),
+        HttpOnly: true,
+        Secure:   r.TLS != nil,
+        Path:     "/",
+        SameSite: http.SameSiteLaxMode,
+    })
+    http.Redirect(w, r, "/chat", http.StatusSeeOther)
+}
 
 // Reset password: final step
 func (h *AuthHandler) HandleResetPassword(w http.ResponseWriter, r *http.Request) {
