@@ -2,152 +2,166 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Hero background image */
+/* ============================
+   Hero background image
+============================ */
 .hero-bg {
   background-image: url('/static/images/hero-background.jpg');
 }
 
-/* Chat animation styles */
-.typing-indicator span { 
-  display: inline-block; 
-  width: 8px; 
-  height: 8px; 
-  border-radius: 50%; 
-  background-color: currentColor; 
-  animation: typing 1s infinite; 
+/* ============================
+   Typing indicator animation
+============================ */
+.typing-indicator span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: typing 1s infinite;
 }
 .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
-@keyframes typing { 
-  0%, 100% { transform: translateY(0); } 
-  50% { transform: translateY(-4px); } 
+@keyframes typing {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
-/* Status indicators */
-.status-item { 
-  display: flex; 
-  align-items: center; 
-  gap: 0.75rem; 
-  color: #64748b; 
-  transition: color 0.3s ease-in-out; 
+/* ============================
+   Status indicators
+============================ */
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #64748b;
+  transition: color 0.3s ease-in-out;
 }
 .status-item.completed { color: #1e293b; }
 
-.status-icon .spinner { 
-  width: 1rem; 
-  height: 1rem; 
-  border: 2px solid currentColor; 
-  border-top-color: transparent; 
-  border-radius: 50%; 
-  animation: spin 1s linear infinite; 
+.status-icon .spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-@keyframes spin { 
-  to { transform: rotate(360deg); } 
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* 🚀 PERFECTED CHAT BUBBLE SIZING - Fixed Version */
+/* ============================
+   Chat message bubbles
+============================ */
 .message-content {
-  /* Let the bubble grow with its content */
   width: fit-content;
-  max-width: 80%; /* A sensible default max-width */
+  max-width: 80%;
   overflow-wrap: break-word;
   word-break: break-word;
+  animation: messageAppear 0.2s ease-out;
 }
 
-/* User messages - right aligned with proper width constraint */
+/* User messages - right aligned */
 .flex.items-start.justify-end .message-content {
   max-width: 70% !important;
   margin-left: auto !important;
   margin-right: 0 !important;
 }
 
-/* Assistant messages - left aligned with slightly wider constraint */  
+/* Assistant messages - left aligned */
 .flex.items-start.gap-3 .message-content {
   max-width: 80% !important;
   margin-left: 0 !important;
   margin-right: auto !important;
 }
 
-/* Prose content within message bubbles */
-.message-content .prose {
-  max-width: 100%; /* Remove the prose max-width limit */
-}
+/* Prose content within messages */
+.message-content .prose { max-width: 100%; }
 
 /* Force proper alignment for user message containers */
-.flex.flex-col.items-end .message-content {
-  margin-left: auto;
-}
+.flex.flex-col.items-end .message-content { margin-left: auto; }
 
 /* Mobile responsiveness */
-@media (max-width: 768px) {
-  .message-content {
-    max-width: 90%;
-  }
-}
-
-@media (max-width: 480px) {
-  .message-content {
-    max-width: 95% !important;
-  }
-}
-
-/* Smooth appearance animation */
-.message-content {
-  animation: messageAppear 0.2s ease-out;
-}
+@media (max-width: 768px) { .message-content { max-width: 90%; } }
+@media (max-width: 480px) { .message-content { max-width: 95% !important; } }
 
 @keyframes messageAppear {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================
+   Sidebar + Collapse
+============================ */
+#sidebar {
+  transition: width 0.3s ease, all 0.2s ease-in-out;
+  overflow: hidden;
+}
+
+/* Collapsed sidebar */
+#sidebar.collapsed {
+  width: 4rem !important;
+}
+
+/* Fade labels when collapsed */
+#sidebar .sidebar-label {
+  transition: opacity 0.2s ease-in-out;
+}
+#sidebar.collapsed .sidebar-label {
+  opacity: 0;
+  display: none !important;
+}
+
+/* Hamburger always visible */
+#sidebar #sidebar-toggle { display: block !important; z-index: 50; }
+
+/* Chat area adjusts with sidebar width */
+#sidebar + .flex-1 {
+  transition: margin-left 0.3s ease;
+}
+#sidebar.collapsed + .flex-1 { margin-left: 4rem; }
+
+/* ============================
+   Auto-collapse on mobile
+============================ */
+@media (max-width: 768px) {
+  #sidebar {
+    width: 4rem;
   }
-  to {
+  #sidebar .sidebar-label { display: none; opacity: 0; }
+}
+
+/* ============================
+   Hover expand sidebar for tablets/desktops
+============================ */
+@media (min-width: 769px) {
+  #sidebar.collapsed:hover {
+    width: 16rem !important;
+  }
+  #sidebar.collapsed:hover .sidebar-label {
+    display: inline !important;
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-@media (min-width: 640px) {
-  #sidebar.collapsed {
-    width: 4rem !important;
-  }
-  #sidebar.collapsed .sidebar-label {
-    display: none !important;
-  }
+/* ============================
+   PDF Export Button (hover)
+============================ */
+.message-content .export-pdf-btn {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  background-color: white;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
+.group:hover .export-pdf-btn { opacity: 1; }
 
-
-/* Applicable on screens 640px and wider */
-@media (min-width: 640px) {
-    #sidebar {
-        /* Start collapsed */
-        width: 4rem; /* 64px */
-        transition: width 0.2s ease-in-out;
-    }
-
-    #sidebar:hover {
-        /* Expand on hover */
-        width: 16rem; /* 256px */
-    }
-
-    /* Hide labels by default inside the sidebar */
-    #sidebar .sidebar-label {
-        display: none;
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
-    }
-
-    /* Show labels when the sidebar is hovered */
-    #sidebar:hover .sidebar-label {
-        display: inline; /* or block, flex, etc. */
-        opacity: 1;
-    }
-    
-    /* Ensure the collapse button is not part of the label logic */
-    #sidebar-collapse-btn .sidebar-label {
-        display: inline !important;
-        opacity: 1 !important;
-    }
-}
+/* ============================
+   Misc helpers
+============================ */
+.hidden { display: none !important; }

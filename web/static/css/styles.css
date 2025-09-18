@@ -1609,10 +1609,6 @@ select {
   pointer-events: none;
 }
 
-.collapse {
-  visibility: collapse;
-}
-
 .static {
   position: static;
 }
@@ -2763,13 +2759,17 @@ select {
   a-z-a--z: ;
 }
 
-/* Hero background image */
+/* ============================
+   Hero background image
+============================ */
 
 .hero-bg {
   background-image: url('/static/images/hero-background.jpg');
 }
 
-/* Chat animation styles */
+/* ============================
+   Typing indicator animation
+============================ */
 
 .typing-indicator span {
   display: inline-block;
@@ -2798,7 +2798,9 @@ select {
   }
 }
 
-/* Status indicators */
+/* ============================
+   Status indicators
+============================ */
 
 .status-item {
   display: flex;
@@ -2827,19 +2829,20 @@ select {
   }
 }
 
-/* 🚀 PERFECTED CHAT BUBBLE SIZING - Fixed Version */
+/* ============================
+   Chat message bubbles
+============================ */
 
 .message-content {
-  /* Let the bubble grow with its content */
   width: -moz-fit-content;
   width: fit-content;
   max-width: 80%;
-  /* A sensible default max-width */
   overflow-wrap: break-word;
   word-break: break-word;
+  animation: messageAppear 0.2s ease-out;
 }
 
-/* User messages - right aligned with proper width constraint */
+/* User messages - right aligned */
 
 .flex.items-start.justify-end .message-content {
   max-width: 70% !important;
@@ -2847,7 +2850,7 @@ select {
   margin-right: 0 !important;
 }
 
-/* Assistant messages - left aligned with slightly wider constraint */
+/* Assistant messages - left aligned */
 
 .flex.items-start.gap-3 .message-content {
   max-width: 80% !important;
@@ -2855,11 +2858,10 @@ select {
   margin-right: auto !important;
 }
 
-/* Prose content within message bubbles */
+/* Prose content within messages */
 
 .message-content .prose {
   max-width: 100%;
-  /* Remove the prose max-width limit */
 }
 
 /* Force proper alignment for user message containers */
@@ -2882,12 +2884,6 @@ select {
   }
 }
 
-/* Smooth appearance animation */
-
-.message-content {
-  animation: messageAppear 0.2s ease-out;
-}
-
 @keyframes messageAppear {
   from {
     opacity: 0;
@@ -2900,54 +2896,105 @@ select {
   }
 }
 
-@media (min-width: 640px) {
-  #sidebar.collapsed {
-    width: 4rem !important;
-  }
+/* ============================
+   Sidebar + Collapse
+============================ */
 
-  #sidebar.collapsed .sidebar-label {
-    display: none !important;
-  }
+#sidebar {
+  transition: width 0.3s ease, all 0.2s ease-in-out;
+  overflow: hidden;
 }
 
-/* Applicable on screens 640px and wider */
+/* Collapsed sidebar */
 
-@media (min-width: 640px) {
+#sidebar.collapsed {
+  width: 4rem !important;
+}
+
+/* Fade labels when collapsed */
+
+#sidebar .sidebar-label {
+  transition: opacity 0.2s ease-in-out;
+}
+
+#sidebar.collapsed .sidebar-label {
+  opacity: 0;
+  display: none !important;
+}
+
+/* Hamburger always visible */
+
+#sidebar #sidebar-toggle {
+  display: block !important;
+  z-index: 50;
+}
+
+/* Chat area adjusts with sidebar width */
+
+#sidebar + .flex-1 {
+  transition: margin-left 0.3s ease;
+}
+
+#sidebar.collapsed + .flex-1 {
+  margin-left: 4rem;
+}
+
+/* ============================
+   Auto-collapse on mobile
+============================ */
+
+@media (max-width: 768px) {
   #sidebar {
-    /* Start collapsed */
     width: 4rem;
-    /* 64px */
-    transition: width 0.2s ease-in-out;
   }
-
-  #sidebar:hover {
-    /* Expand on hover */
-    width: 16rem;
-    /* 256px */
-  }
-
-  /* Hide labels by default inside the sidebar */
 
   #sidebar .sidebar-label {
     display: none;
     opacity: 0;
-    transition: opacity 0.2s ease-in-out;
+  }
+}
+
+/* ============================
+   Hover expand sidebar for tablets/desktops
+============================ */
+
+@media (min-width: 769px) {
+  #sidebar.collapsed:hover {
+    width: 16rem !important;
   }
 
-  /* Show labels when the sidebar is hovered */
-
-  #sidebar:hover .sidebar-label {
-    display: inline;
-    /* or block, flex, etc. */
+  #sidebar.collapsed:hover .sidebar-label {
+    display: inline !important;
     opacity: 1;
   }
+}
 
-  /* Ensure the collapse button is not part of the label logic */
+/* ============================
+   PDF Export Button (hover)
+============================ */
 
-  #sidebar-collapse-btn .sidebar-label {
-    display: inline !important;
-    opacity: 1 !important;
-  }
+.message-content .export-pdf-btn {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  background-color: white;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.group:hover .export-pdf-btn {
+  opacity: 1;
+}
+
+/* ============================
+   Misc helpers
+============================ */
+
+.hidden {
+  display: none !important;
 }
 
 .placeholder\:text-\[\#64748b\]::-moz-placeholder {
@@ -3157,16 +3204,8 @@ select {
     margin-top: 1rem;
   }
 
-  .sm\:block {
-    display: block;
-  }
-
   .sm\:flex {
     display: flex;
-  }
-
-  .sm\:hidden {
-    display: none;
   }
 
   .sm\:h-10 {

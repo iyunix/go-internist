@@ -71,7 +71,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 			"frame-ancestors 'none'",
 			"img-src 'self' data:",
 			"style-src 'self' 'unsafe-inline'", // TODO: Remove 'unsafe-inline' in future iteration
-			"font-src 'self'",
+			"font-src 'self' https://r2cdn.perplexity.ai",
 			"script-src 'self' 'unsafe-inline'", // TODO: Remove 'unsafe-inline' in future iteration
 			"connect-src 'self'",
 			"frame-src 'none'",
