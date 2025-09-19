@@ -266,19 +266,9 @@ async function sendMessage(prompt) {
   if (currentEventSource) currentEventSource.close();
   renderVirtualMessages(true);
   vScrollContainer.scrollTop = vScrollContainer.scrollHeight;
-  try {
-    await fetch(`/api/chats/${chatId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: prompt, messageType: "user" }),
-    });
-  } catch {
-    alert("Error sending message.");
-    enableInput(true);
-    return;
+    // Call the function and pass both the chatId and the prompt
+    await streamAssistantResponse(chatId, prompt);
   }
-  await streamAssistantResponse(chatId);
-}
 async function startNewChat(prompt) {
   try {
     const title = prompt.length > 50 ? prompt.slice(0, 50) + "..." : prompt;
@@ -300,7 +290,7 @@ async function startNewChat(prompt) {
     return null;
   }
 }
-async function streamAssistantResponse(chatId) {
+async function streamAssistantResponse(chatId, prompt) {
   if (!vScrollContainer) return;
   const vIdx = virtualMessages.length;
   const wrapperId = "assistant-stream-" + Date.now();
@@ -325,12 +315,14 @@ async function streamAssistantResponse(chatId) {
     document.head.appendChild(style);
   }
   let statuses = {
+    translating: "pending", // ADD THIS LINE
     understanding: "pending",
     searching: "pending",
     thinking: "pending",
   };
   const updateStatusUI = () => {
     const steps = [
+      { id: "translating", text: "Translating to English..." }, // ADD THIS LINE
       { id: "understanding", text: "Understanding question..." },
       { id: "searching", text: "Searching UpToDate..." },
       { id: "thinking", text: "Generating response..." },
@@ -349,7 +341,7 @@ async function streamAssistantResponse(chatId) {
   };
   updateStatusUI();
   if (currentEventSource) currentEventSource.close();
-  currentEventSource = new EventSource(`/api/chats/${chatId}/stream`);
+  currentEventSource = new EventSource(`/api/chats/${chatId}/stream?q=${encodeURIComponent(prompt)}`);
   currentEventSource.addEventListener("status", e => {
     const data = JSON.parse(e.data);
     Object.keys(statuses).forEach(k => { if (statuses[k] !== "pending") statuses[k] = "completed"; });

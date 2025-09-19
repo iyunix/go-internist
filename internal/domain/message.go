@@ -39,6 +39,8 @@ const (
     MessageTypeDiagnostic = "diagnostic"
     MessageTypeTreatment  = "treatment"
     MessageTypeFollowUp   = "follow_up"
+    MessageTypeInternalContext = "internal_context" // ADD THIS LINE
+
 )
 
 // IsValidMessageType checks if the message type is valid
@@ -46,6 +48,7 @@ func (m *Message) IsValidMessageType() bool {
     validTypes := []string{
         MessageTypeUser, MessageTypeAssistant, MessageTypeSystem,
         MessageTypeMedicalAI, MessageTypeDiagnostic, MessageTypeTreatment, MessageTypeFollowUp,
+        MessageTypeInternalContext, // ADD THIS LINE
     }
     
     for _, validType := range validTypes {

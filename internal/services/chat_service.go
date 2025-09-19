@@ -242,21 +242,37 @@ func (s *ChatService) StreamChatMessageWithSources(
 		onStatus("translated", "Text optimized for search")
 	}
 
-	// --- Save both original & translated messages ---
-	if originalPrompt != processedPrompt {
-		// Save original
-		_, _ = s.SaveMessage(ctx, userID, chatID, originalPrompt, "user")
-		// Save translated
-		_, _ = s.SaveMessage(ctx, userID, chatID, processedPrompt, "user_en")
-	} else {
-		// Save as normal if no translation
-		_, _ = s.SaveMessage(ctx, userID, chatID, processedPrompt, "user_en")
-	}
+    if originalPrompt != processedPrompt {
+        // 1. Save the original user message for display.
+        _, err := s.SaveMessage(ctx, userID, chatID, originalPrompt, "user")
+        if err != nil {
+            s.logger.Error("failed to save original user message", "error", err)
+            return err
+        }
+
+        // 2. Save the translated version ONLY for internal RAG/memory use.
+        _, err = s.SaveMessage(ctx, userID, chatID, processedPrompt, "internal_context")
+        if err != nil {
+            s.logger.Error("failed to save internal context message", "error", err)
+            // This error is not critical for the user, so we can just log it.
+        }
+    } else {
+        // If there was no translation, save the prompt for both display and internal use.
+        _, err := s.SaveMessage(ctx, userID, chatID, originalPrompt, "user")
+        if err != nil {
+            s.logger.Error("failed to save user message", "error", err)
+            return err
+        }
+        _, err = s.SaveMessage(ctx, userID, chatID, originalPrompt, "internal_context")
+        if err != nil {
+            s.logger.Error("failed to save internal context message", "error", err)
+        }
+    }
 
 	// ----- Build embedding & LLM windows from alternating pairs -----
 	const memoryPairLimit = 3 // how many user–assistant pairs to remember
 
-	pairs, err := s.messageRepo.FindRecentUserAssistantPairs(ctx, chatID, memoryPairLimit, "user_en")
+    pairs, err := s.messageRepo.FindRecentUserAssistantPairs(ctx, chatID, memoryPairLimit, "internal_context")
 	if err != nil || len(pairs) == 0 {
 		// fallback to empty if new chat
 		pairs = []domain.Message{}
@@ -266,12 +282,12 @@ func (s *ChatService) StreamChatMessageWithSources(
 	var llmWindow []string
 
 	for _, m := range pairs {
-		if m.MessageType == "user_en" {
+        if m.MessageType == "internal_context" {
 			// For retrieval you normally only use the user questions
-			embeddingWindow = append(embeddingWindow, m.Content)
+            embeddingWindow = append(embeddingWindow, m.Content)
 		}
 		// LLM window always gets the whole conversation (user & assistant)
-		llmWindow = append(llmWindow, m.Content)
+        llmWindow = append(llmWindow, m.Content)
 	}
 
 	// Add the new prompt to both windows

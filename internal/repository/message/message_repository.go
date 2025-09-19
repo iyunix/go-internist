@@ -48,24 +48,27 @@ func (r *gormMessageRepository) Create(ctx context.Context, message *domain.Mess
 // FindByChatID - Enhanced with memory safety warning (deprecated)
 func (r *gormMessageRepository) FindByChatID(ctx context.Context, chatID uint) ([]domain.Message, error) {
     log.Printf("[MessageRepository] WARNING: FindByChatID() loads all messages into memory. Use FindByChatIDWithPagination() for production.")
-    
+
     if chatID == 0 {
         return nil, errors.New("invalid chat ID")
     }
-    
+
     var messages []domain.Message
+    visibleTypes := []string{domain.MessageTypeUser, domain.MessageTypeAssistant}
+
     err := r.db.WithContext(ctx).
-        Where("chat_id = ?", chatID).
+        Where("chat_id = ? AND message_type IN ?", chatID, visibleTypes). // <-- ADDED FILTER
         Order("created_at asc").
         Find(&messages).Error
-    
+
     if err != nil {
         log.Printf("[MessageRepository] Database error finding messages for chat ID %d: %v", chatID, err)
         return nil, errors.New("database error fetching messages")
     }
-    
+
     return messages, nil
 }
+
 
 // ===== NEW PRODUCTION-READY METHODS =====
 
@@ -74,7 +77,7 @@ func (r *gormMessageRepository) FindByChatIDWithPagination(ctx context.Context, 
     if chatID == 0 {
         return nil, 0, errors.New("invalid chat ID")
     }
-    
+
     // Memory safety: enforce maximum limit
     if limit <= 0 || limit > 1000 {
         return nil, 0, errors.New("invalid limit: must be between 1 and 1000")
@@ -82,31 +85,39 @@ func (r *gormMessageRepository) FindByChatIDWithPagination(ctx context.Context, 
     if offset < 0 {
         return nil, 0, errors.New("invalid offset: must be >= 0")
     }
-    
+
     var messages []domain.Message
     var total int64
-    
-    // Efficient counting without loading data
-    if err := r.db.WithContext(ctx).Model(&domain.Message{}).Where("chat_id = ?", chatID).Count(&total).Error; err != nil {
+
+    // Define the message types that are visible in the UI
+    visibleTypes := []string{domain.MessageTypeUser, domain.MessageTypeAssistant}
+
+    // --- CHANGE 1: Modify the Count query ---
+    // Count only the messages that are visible to the user.
+    if err := r.db.WithContext(ctx).Model(&domain.Message{}).
+        Where("chat_id = ? AND message_type IN ?", chatID, visibleTypes). // <-- ADDED FILTER
+        Count(&total).Error; err != nil {
         log.Printf("[MessageRepository] Database error counting messages for chat ID %d: %v", chatID, err)
         return nil, 0, errors.New("database error counting messages")
     }
-    
-    // Load only requested page
+
+    // --- CHANGE 2: Modify the Find query ---
+    // Load only the requested page of visible messages.
     err := r.db.WithContext(ctx).
-        Where("chat_id = ?", chatID).
+        Where("chat_id = ? AND message_type IN ?", chatID, visibleTypes). // <-- ADDED FILTER
         Order("created_at asc").
         Limit(limit).
         Offset(offset).
         Find(&messages).Error
-    
+
     if err != nil {
         log.Printf("[MessageRepository] Database error in paginated query for chat ID %d: %v", chatID, err)
         return nil, 0, errors.New("database error retrieving paginated messages")
     }
-    
+
     return messages, total, nil
 }
+
 
 // FindByID - Complete CRUD operation
 func (r *gormMessageRepository) FindByID(ctx context.Context, messageID uint) (*domain.Message, error) {
@@ -615,6 +626,7 @@ func (r *gormMessageRepository) validateMessageType(messageType string) error {
         "diagnostic":  true,
         "treatment":   true,
         "follow_up":   true,
+        "internal_context": true, // ADD THIS LINE
     }
     
     if messageType != "" && !allowedTypes[messageType] {
