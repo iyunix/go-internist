@@ -1930,10 +1930,6 @@ select {
   cursor: pointer;
 }
 
-.resize {
-  resize: both;
-}
-
 .appearance-none {
   -webkit-appearance: none;
      -moz-appearance: none;
@@ -2764,7 +2760,7 @@ select {
 }
 
 /* ============================
-   Hero background image
+    Hero background image
 ============================ */
 
 .hero-bg {
@@ -2772,7 +2768,7 @@ select {
 }
 
 /* ============================
-   Typing indicator animation
+    Typing indicator animation
 ============================ */
 
 .typing-indicator span {
@@ -2803,7 +2799,7 @@ select {
 }
 
 /* ============================
-   Status indicators
+    Status indicators
 ============================ */
 
 .status-item {
@@ -2834,7 +2830,7 @@ select {
 }
 
 /* ============================
-   Chat message bubbles
+    Chat message bubbles
 ============================ */
 
 .message-content {
@@ -2843,6 +2839,8 @@ select {
   max-width: 80%;
   overflow-wrap: break-word;
   word-break: break-word;
+  min-height: 44px;
+  /* MODIFIED: Added min-height for consistent bubble size */
   animation: messageAppear 0.2s ease-out;
 }
 
@@ -2901,7 +2899,7 @@ select {
 }
 
 /* ============================
-   Sidebar + Collapse
+    Sidebar + Collapse
 ============================ */
 
 #sidebar {
@@ -2944,7 +2942,7 @@ select {
 }
 
 /* ============================
-   Auto-collapse on mobile
+    Auto-collapse on mobile
 ============================ */
 
 @media (max-width: 768px) {
@@ -2959,7 +2957,7 @@ select {
 }
 
 /* ============================
-   Hover expand sidebar for tablets/desktops
+    Hover expand sidebar for tablets/desktops
 ============================ */
 
 @media (min-width: 769px) {
@@ -2974,7 +2972,7 @@ select {
 }
 
 /* ============================
-   PDF Export Button (hover)
+    PDF Export Button (hover)
 ============================ */
 
 .message-content .export-pdf-btn {
@@ -2994,7 +2992,7 @@ select {
 }
 
 /* ============================
-   Misc helpers
+    Misc helpers
 ============================ */
 
 .hidden {

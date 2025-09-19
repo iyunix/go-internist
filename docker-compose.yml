@@ -30,7 +30,7 @@ services:
       - SMS_TEMPLATE_ID=512130
       - ADMIN_PHONE_NUMBER=09371997640
       # Additional variables from your .env
-      - RAG_TOPK=8
+      - RAG_TOPK=${RAG_TOPK}
       - TRANSLATION_ENABLED=true
       - EMBEDDING_MODEL_NAME=text-embedding-3-large
     depends_on:

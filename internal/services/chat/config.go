@@ -52,7 +52,6 @@ func (c *Config) Validate() error {
 
 func DefaultConfig() *Config {
     return &Config{
-        RetrievalTopK:    8,
         ContextMaxTokens: 8000,
         ChatModel:        "jabir-400b",
         StreamModel:      "jabir-400b",

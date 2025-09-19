@@ -7,7 +7,7 @@ import (
     "strings"
     "time"
     "sync"
-
+    "log"
     "github.com/iyunix/go-internist/internal/config"
     "github.com/iyunix/go-internist/internal/domain"
     "github.com/iyunix/go-internist/internal/repository/chat"
@@ -148,7 +148,7 @@ func NewChatService(
     messageRepo message.MessageRepository,
     aiService *AIService,
     pineconeService *PineconeService,
-    retrievalTopK int,
+    retrievalTopK int, // This value (15) is injected by Wire
     appConfig *config.Config,
     translationService *TranslationService, // <--- Only injected!
 ) (*ChatService, error) {
@@ -156,6 +156,7 @@ func NewChatService(
         return nil, errors.New("all dependencies are required for ChatService")
     }
 
+    log.Printf("[DEBUG] NewChatService created with RetrievalTopK: %d", retrievalTopK)
     config := chatservice.DefaultConfig()
     if retrievalTopK > 0 {
         config.RetrievalTopK = retrievalTopK

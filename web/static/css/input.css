@@ -2,15 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+
 /* ============================
-   Hero background image
+    Hero background image
 ============================ */
 .hero-bg {
   background-image: url('/static/images/hero-background.jpg');
 }
 
+
 /* ============================
-   Typing indicator animation
+    Typing indicator animation
 ============================ */
 .typing-indicator span {
   display: inline-block;
@@ -23,13 +25,15 @@
 .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
+
 @keyframes typing {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
 }
 
+
 /* ============================
-   Status indicators
+    Status indicators
 ============================ */
 .status-item {
   display: flex;
@@ -40,6 +44,7 @@
 }
 .status-item.completed { color: #1e293b; }
 
+
 .status-icon .spinner {
   width: 1rem;
   height: 1rem;
@@ -49,18 +54,22 @@
   animation: spin 1s linear infinite;
 }
 
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
+
 /* ============================
-   Chat message bubbles
+    Chat message bubbles
 ============================ */
 .message-content {
   width: fit-content;
   max-width: 80%;
   overflow-wrap: break-word;
   word-break: break-word;
+  min-height: 44px; /* MODIFIED: Added min-height for consistent bubble size */
   animation: messageAppear 0.2s ease-out;
 }
+
 
 /* User messages - right aligned */
 .flex.items-start.justify-end .message-content {
@@ -69,6 +78,7 @@
   margin-right: 0 !important;
 }
 
+
 /* Assistant messages - left aligned */
 .flex.items-start.gap-3 .message-content {
   max-width: 80% !important;
@@ -76,33 +86,40 @@
   margin-right: auto !important;
 }
 
+
 /* Prose content within messages */
 .message-content .prose { max-width: 100%; }
+
 
 /* Force proper alignment for user message containers */
 .flex.flex-col.items-end .message-content { margin-left: auto; }
 
+
 /* Mobile responsiveness */
 @media (max-width: 768px) { .message-content { max-width: 90%; } }
 @media (max-width: 480px) { .message-content { max-width: 95% !important; } }
+
 
 @keyframes messageAppear {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+
 /* ============================
-   Sidebar + Collapse
+    Sidebar + Collapse
 ============================ */
 #sidebar {
   transition: width 0.3s ease, all 0.2s ease-in-out;
   overflow: hidden;
 }
 
+
 /* Collapsed sidebar */
 #sidebar.collapsed {
   width: 4rem !important;
 }
+
 
 /* Fade labels when collapsed */
 #sidebar .sidebar-label {
@@ -113,8 +130,10 @@
   display: none !important;
 }
 
+
 /* Hamburger always visible */
 #sidebar #sidebar-toggle { display: block !important; z-index: 50; }
+
 
 /* Chat area adjusts with sidebar width */
 #sidebar + .flex-1 {
@@ -122,8 +141,9 @@
 }
 #sidebar.collapsed + .flex-1 { margin-left: 4rem; }
 
+
 /* ============================
-   Auto-collapse on mobile
+    Auto-collapse on mobile
 ============================ */
 @media (max-width: 768px) {
   #sidebar {
@@ -132,8 +152,9 @@
   #sidebar .sidebar-label { display: none; opacity: 0; }
 }
 
+
 /* ============================
-   Hover expand sidebar for tablets/desktops
+    Hover expand sidebar for tablets/desktops
 ============================ */
 @media (min-width: 769px) {
   #sidebar.collapsed:hover {
@@ -145,8 +166,9 @@
   }
 }
 
+
 /* ============================
-   PDF Export Button (hover)
+    PDF Export Button (hover)
 ============================ */
 .message-content .export-pdf-btn {
   position: absolute;
@@ -161,7 +183,8 @@
 }
 .group:hover .export-pdf-btn { opacity: 1; }
 
+
 /* ============================
-   Misc helpers
+    Misc helpers
 ============================ */
 .hidden { display: none !important; }

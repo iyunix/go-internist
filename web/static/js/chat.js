@@ -1,3 +1,5 @@
+// G:\go_internist\web\static\js\chat.js (Correct and Final Version)
+
 // ===== Global & Setup =====
 const currentUsername = window.INTERNIST_DATA?.currentUsername || "Unknown User";
 let activeChatID = window.INTERNIST_DATA?.activeChatID || 0;
@@ -13,7 +15,7 @@ function isRTL(text) {
 }
 
 // ===== DOM References =====
-const vScrollContainer = document.getElementById("message-container");
+const messageContainer = document.getElementById("message-container");
 const chatForm = document.getElementById("chat-form");
 const messageInput = document.getElementById("message-input");
 const sendButton = document.getElementById("send-button");
@@ -24,14 +26,6 @@ const confirmDeleteBtn = document.getElementById("modal-confirm-delete-btn");
 const cancelDeleteBtn = document.getElementById("modal-cancel-btn");
 const sidebar = document.getElementById("sidebar");
 const sidebarToggle = document.getElementById("sidebar-toggle");
-const mainContainer = document.querySelector("main.flex-1.flex-col");
-
-// ===== Virtual Scroll State =====
-let virtualMessages = []; // [{id, messageType, content,...}]
-let vTopIndex = 0;
-let vVisibleCount = 30;
-let vMessageHeight = 90;
-let vScrollBuffer = 6;
 
 // ===== Input RTL Direction =====
 messageInput?.addEventListener("input", () => {
@@ -46,7 +40,7 @@ function enableInput(enable = true) {
   if (enable) messageInput.focus();
 }
 function sanitizeHTML(html) {
-  return DOMPurify.sanitize(marked.parse(html));
+  return DOMPurify.sanitize(marked.parse(html || ""));
 }
 
 // ===== Sidebar Collapse/Expand Logic =====
@@ -85,7 +79,6 @@ function updateSidebarActiveHighlight() {
   });
 }
 if (chatListContainer && chats.length > 0) chats.forEach(insertOrUpdateChatInSidebar);
-// Sidebar Chat Click/Delete Event
 if (chatListContainer) {
   chatListContainer.addEventListener("click", e => {
     const deleteButton = e.target.closest(".delete-chat-btn");
@@ -110,136 +103,82 @@ async function deleteChat(chatId) {
     if (!resp.ok) throw new Error("Delete failed");
     document.querySelector(`div[data-chat-item-id='${chatId}']`)?.remove();
     if (parseInt(chatId) === activeChatID) {
-      const firstChat = chatListContainer.querySelector("[data-chat-item-id]");
-      if (firstChat) {
-        activeChatID = parseInt(firstChat.dataset.chatItemId, 10);
-        updateSidebarActiveHighlight();
-        window.location.href = `/chat?id=${activeChatID}`;
-      } else {
-        activeChatID = 0;
-        window.location.href = "/chat";
-      }
+      window.location.href = "/chat"; // Redirect to base chat page after deleting the active one.
     }
   } catch (err) {
     console.error(err);
     alert("Could not delete the chat. Please try again.");
   }
 }
-newChatBtn?.addEventListener("click", createNewChat);
-async function createNewChat() {
-  try {
-    const response = await fetch("/api/chats", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "New Chat" }),
-    });
-    if (!response.ok) throw new Error("Failed to create chat");
-    const newChat = await response.json();
-    activeChatID = newChat.id;
-    insertOrUpdateChatInSidebar(newChat);
-    updateSidebarActiveHighlight();
-    window.location.href = `/chat?id=${newChat.id}`;
-  } catch (err) {
-    console.error(err);
-    alert("Could not create a new chat. Please try again.");
-  }
-}
-
-// ===== Virtual Message Rendering =====
-function renderVirtualMessages(force = false) {
-  if (!vScrollContainer) return;
-  const scrollTop = vScrollContainer.scrollTop;
-  const containerHeight = vScrollContainer.clientHeight;
-  vVisibleCount = Math.ceil(containerHeight / vMessageHeight) + vScrollBuffer;
-  vTopIndex = Math.max(0, Math.floor(scrollTop / vMessageHeight) - Math.floor(vScrollBuffer / 2));
-  const vBottomIndex = Math.min(vTopIndex + vVisibleCount, virtualMessages.length);
-  const topSpacer = document.createElement("div");
-  topSpacer.style.height = vTopIndex * vMessageHeight + "px";
-  const bottomSpacer = document.createElement("div");
-  bottomSpacer.style.height = (virtualMessages.length - vBottomIndex) * vMessageHeight + "px";
-  let visibleHTML = "";
-  for (let i = vTopIndex; i < vBottomIndex; ++i) {
-    const msg = virtualMessages[i];
-    visibleHTML +=
-      msg.messageType === "assistant"
-        ? `<div class="flex items-start gap-3 group">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-200">
-              <span class="material-symbols-outlined text-[#64748b]">smart_toy</span>
-            </div>
-            <div class="flex-1">
-              <p class="text-sm font-medium text-[#64748b]">Internist AI</p>
-              <div class="relative mt-1">
-                <div class="message-content rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]">
-                  <div class="prose prose-lg">${msg.content}</div>
-                </div>
-                <button onclick="exportMessageAsPDF(this.parentElement.querySelector('.message-content').innerHTML)"
-                        class="absolute top-1 right-1 transition-opacity bg-white p-1 rounded-full shadow-sm hover:bg-gray-200 z-10"
-                        title="Export as PDF">
-                  <span class="material-symbols-outlined text-base text-gray-600">picture_as_pdf</span>
-                </button>
-              </div>
-            </div>
-          </div>`
-
-        : `<div class="flex items-start justify-end gap-3">
-             <div class="flex flex-col items-end">
-               <p class="text-right text-sm font-medium text-[#64748b]">${currentUsername}</p>
-               <div class="message-content mt-1 rounded-lg rounded-tr-none bg-[#13a4ec] p-3 text-base text-white" dir="${isRTL(msg.content) ? "rtl" : "ltr"}">${msg.content}</div>
-             </div>
-           </div>`;
-  }
-  vScrollContainer.innerHTML = "";
-  vScrollContainer.appendChild(topSpacer);
-  const messagesDiv = document.createElement("div");
-  messagesDiv.innerHTML = visibleHTML;
-  while (messagesDiv.firstChild) {
-    vScrollContainer.appendChild(messagesDiv.firstChild);
-  }
-  vScrollContainer.appendChild(bottomSpacer);
-}
-
-// ===== Virtual Scroll Infinite Scroll Control =====
-let messagePage = 1;
-const messageLimit = 50;
-let allMessagesLoaded = false;
-async function loadVirtualOlderMessages() {
-  if (allMessagesLoaded || !vScrollContainer) return;
-  messagePage += 1;
-  try {
-    const resp = await fetch(`/api/chats/${activeChatID}/messages?page=${messagePage}&limit=${messageLimit}`);
-    if (!resp.ok) throw new Error("Failed to load messages");
-    const data = await resp.json();
-    if (!data.has_more || !Array.isArray(data.messages) || data.messages.length === 0) {
-      allMessagesLoaded = true;
-      return;
-    }
-    virtualMessages = data.messages.concat(virtualMessages);
-    renderVirtualMessages(true);
-  } catch (err) {
-    console.error(err);
-  }
-}
-async function loadInitialMessages() {
-  messagePage = 1;
-  allMessagesLoaded = false;
-  try {
-    const resp = await fetch(`/api/chats/${activeChatID}/messages?page=${messagePage}&limit=${messageLimit}`);
-    if (!resp.ok) throw new Error("Failed to load messages");
-    const data = await resp.json();
-    virtualMessages = Array.isArray(data.messages) ? data.messages : [];
-    renderVirtualMessages(true);
-    vScrollContainer.scrollTop = vScrollContainer.scrollHeight;
-  } catch (err) {
-    console.error(err);
-  }
-}
-vScrollContainer?.addEventListener("scroll", () => {
-  if (vScrollContainer.scrollTop < 50 && !allMessagesLoaded) {
-    loadVirtualOlderMessages();
-  }
-  renderVirtualMessages();
+newChatBtn?.addEventListener("click", () => {
+    window.location.href = "/chat"; // "New Chat" button simply navigates to the base page.
 });
-window.addEventListener("resize", () => renderVirtualMessages(true));
+
+// ===== START: Rendering Logic =====
+function createMessageHTML(msg) {
+  if (msg.messageType === "assistant") {
+    return `
+      <div class="flex items-start gap-3 group" id="message-${msg.id}">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-200">
+          <span class="material-symbols-outlined text-[#64748b]">smart_toy</span>
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-medium text-[#64748b]">Internist AI</p>
+          <div class="relative mt-1">
+            <div class="message-content rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]">
+              <div class="prose prose-lg">${sanitizeHTML(msg.content)}</div>
+            </div>
+            <button onclick="exportMessageAsPDF(this.parentElement.querySelector('.message-content').innerHTML)"
+                    class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-full shadow-sm hover:bg-gray-200"
+                    title="Export as PDF">
+              <span class="material-symbols-outlined text-base text-gray-600">picture_as_pdf</span>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  } else { // User message
+    return `
+      <div class="flex items-start justify-end gap-3" id="message-${msg.id}">
+        <div class="flex flex-col items-end">
+          <p class="text-right text-sm font-medium text-[#64748b]">${currentUsername}</p>
+          <div class="message-content mt-1 rounded-lg rounded-tr-none bg-[#13a4ec] p-3 text-base text-white" dir="${isRTL(msg.content) ? "rtl" : "ltr"}">
+            ${msg.content}
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
+function appendMessageToDOM(msg) {
+    if (!messageContainer) return;
+    const html = createMessageHTML(msg);
+    const container = messageContainer.querySelector('.space-y-8');
+    if (container) {
+        container.insertAdjacentHTML('beforeend', html);
+        messageContainer.scrollTop = messageContainer.scrollHeight;
+    }
+}
+
+async function loadInitialMessages() {
+    if (!activeChatID || !messageContainer) return;
+    try {
+        const resp = await fetch(`/api/chats/${activeChatID}/messages?page=1&limit=50`);
+        if (!resp.ok) throw new Error("Failed to load messages");
+        const data = await resp.json();
+        const messages = data.messages || [];
+        const container = messageContainer.querySelector('.space-y-8');
+        if (container) {
+            container.innerHTML = '';
+            messages.forEach(msg => {
+                container.insertAdjacentHTML('beforeend', createMessageHTML(msg));
+            });
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+// ===== END: Rendering Logic =====
 
 // ===== Send & Stream Messages =====
 chatForm?.addEventListener("submit", e => {
@@ -247,28 +186,40 @@ chatForm?.addEventListener("submit", e => {
   const prompt = messageInput.value.trim();
   if (prompt) sendMessage(prompt);
 });
+
 let currentEventSource = null;
+
 async function sendMessage(prompt) {
-  if (!vScrollContainer) return;
+  if (!messageContainer) return;
   document.getElementById("welcome-message")?.remove();
   let chatId = activeChatID;
-  if (chatId === 0) chatId = await startNewChat(prompt);
-  if (!chatId) return;
+  
+  // If this is the very first message in a new session, create the chat first.
+  if (chatId === 0) {
+    chatId = await startNewChat(prompt);
+    if (!chatId) { // If chat creation failed, stop.
+        enableInput(true);
+        return;
+    }
+  }
+  
   messageInput.value = "";
   enableInput(false);
-  // Optimistically push user message to virtual list
+  
+  // Optimistically append user message directly to DOM
   const userMsg = {
     id: Date.now().toString() + "-user",
     messageType: "user",
-    content: sanitizeHTML(prompt),
+    content: prompt, // Rendered as plain text
   };
-  virtualMessages.push(userMsg);
+  appendMessageToDOM(userMsg);
+  
   if (currentEventSource) currentEventSource.close();
-  renderVirtualMessages(true);
-  vScrollContainer.scrollTop = vScrollContainer.scrollHeight;
-    // Call the function and pass both the chatId and the prompt
-    await streamAssistantResponse(chatId, prompt);
-  }
+  
+  await streamAssistantResponse(chatId, prompt);
+}
+
+// MODIFIED: This function now ONLY creates the chat and updates the state. It does NOT reload the page.
 async function startNewChat(prompt) {
   try {
     const title = prompt.length > 50 ? prompt.slice(0, 50) + "..." : prompt;
@@ -279,32 +230,52 @@ async function startNewChat(prompt) {
     });
     if (!resp.ok) throw new Error("Server failed to create chat");
     const newChat = await resp.json();
+    
+    // Update the state WITHOUT reloading the page
     activeChatID = newChat.id;
+    history.pushState({ chatId: newChat.id }, "", `/chat?id=${newChat.id}`);
     insertOrUpdateChatInSidebar(newChat);
     updateSidebarActiveHighlight();
-    history.pushState({}, "", `/chat?id=${newChat.id}`);
-    await loadInitialMessages();
-    return newChat.id;
-  } catch {
+    
+    return newChat.id; // Return the new ID to sendMessage
+  } catch (err) {
+    console.error(err);
     alert("Could not start a new chat session.");
     return null;
   }
 }
+
 async function streamAssistantResponse(chatId, prompt) {
-  if (!vScrollContainer) return;
-  const vIdx = virtualMessages.length;
+  if (!messageContainer) return;
+
   const wrapperId = "assistant-stream-" + Date.now();
   const contentId = "assistant-stream-content-" + Date.now();
-  const msgObj = {
-    id: wrapperId,
-    messageType: "assistant",
-    content: `<div id="${contentId}"><div class="status-container space-y-2"></div></div>`,
-  };
-  virtualMessages.push(msgObj);
-  renderVirtualMessages(true);
-  vScrollContainer.scrollTop = vScrollContainer.scrollHeight;
+
+  const assistantMsgHTML = `
+    <div class="flex items-start gap-3 group" id="${wrapperId}">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-200">
+        <span class="material-symbols-outlined text-[#64748b]">smart_toy</span>
+      </div>
+      <div class="flex-1">
+        <p class="text-sm font-medium text-[#64748b]">Internist AI</p>
+        <div class="relative mt-1">
+          <div class="message-content rounded-lg rounded-tl-none bg-gray-100 p-3 text-base text-[#1e293b]">
+            <div class="prose prose-lg" id="${contentId}">
+              <div class="status-container space-y-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  const container = messageContainer.querySelector('.space-y-8');
+  if(container) {
+    container.insertAdjacentHTML('beforeend', assistantMsgHTML);
+    messageContainer.scrollTop = messageContainer.scrollHeight;
+  }
+  
   const assistantContent = () => document.getElementById(contentId);
   const statusContainer = () => assistantContent()?.querySelector(".status-container");
+
   if (!document.getElementById("spinner-style")) {
     const style = document.createElement("style");
     style.id = "spinner-style";
@@ -314,15 +285,16 @@ async function streamAssistantResponse(chatId, prompt) {
     `;
     document.head.appendChild(style);
   }
+
   let statuses = {
-    translating: "pending", // ADD THIS LINE
+    translating: "pending",
     understanding: "pending",
     searching: "pending",
     thinking: "pending",
   };
   const updateStatusUI = () => {
     const steps = [
-      { id: "translating", text: "Translating to English..." }, // ADD THIS LINE
+      { id: "translating", text: "Translating to English..." },
       { id: "understanding", text: "Understanding question..." },
       { id: "searching", text: "Searching UpToDate..." },
       { id: "thinking", text: "Generating response..." },
@@ -340,31 +312,40 @@ async function streamAssistantResponse(chatId, prompt) {
       .join("");
   };
   updateStatusUI();
+  
   if (currentEventSource) currentEventSource.close();
+  
   currentEventSource = new EventSource(`/api/chats/${chatId}/stream?q=${encodeURIComponent(prompt)}`);
+  
   currentEventSource.addEventListener("status", e => {
     const data = JSON.parse(e.data);
     Object.keys(statuses).forEach(k => { if (statuses[k] !== "pending") statuses[k] = "completed"; });
     if (statuses.hasOwnProperty(data.status)) statuses[data.status] = "in-progress";
     updateStatusUI();
   });
+
   let firstChunk = true;
+  let fullContent = "";
+
   currentEventSource.onmessage = e => {
     const data = JSON.parse(e.data);
-    if (firstChunk) {
-      assistantContent().innerHTML = "";
-      firstChunk = false;
+    const contentDiv = assistantContent();
+    if(contentDiv){
+        if (firstChunk) {
+            contentDiv.innerHTML = "";
+            firstChunk = false;
+        }
+        fullContent += data.content;
+        contentDiv.innerHTML = sanitizeHTML(fullContent);
+        messageContainer.scrollTop = messageContainer.scrollHeight;
     }
-    assistantContent().insertAdjacentHTML("beforeend", sanitizeHTML(data.content));
-    vScrollContainer.scrollTop = vScrollContainer.scrollHeight;
   };
-  function finishStream() {
+
+  currentEventSource.addEventListener("done", () => {
     if (currentEventSource) currentEventSource.close();
-    msgObj.content = assistantContent()?.innerHTML || "";
-    renderVirtualMessages(true);
     enableInput(true);
-  }
-  currentEventSource.addEventListener("done", finishStream);
+  });
+
   currentEventSource.onerror = () => {
     if (currentEventSource) currentEventSource.close();
     if (assistantContent()) assistantContent().innerHTML = '<p class="text-red-500">Sorry, an error occurred.</p>';
@@ -395,5 +376,5 @@ async function exportMessageAsPDF(messageHTML) {
   }
 }
 
-// ===== Initial Load (call this on page ready!) =====
-if (vScrollContainer) loadInitialMessages();
+// ===== Initial Load =====
+if (messageContainer) loadInitialMessages();

@@ -42,8 +42,6 @@ type Config struct {
     PineconeAPIKey    string  // Now stores Qdrant API Key
     PineconeIndexHost string  // Now stores Qdrant URL
     PineconeNamespace string  // Now stores Qdrant Collection Name
-    RetrievalTopK     int
-
     // SMS Configuration - ✅ Clean field definitions
     SMSAccessKey  string
     SMSTemplateID string  // Keep as string, convert to int in wire.go
@@ -52,6 +50,9 @@ type Config struct {
     // Application Settings
     AdminPhoneNumber   string
     TranslationEnabled bool
+
+    RetrievalTopK int
+
 }
 
 func New() (*Config, error) {
@@ -92,7 +93,7 @@ func New() (*Config, error) {
         PineconeAPIKey:    os.Getenv("QDRANT_API_KEY"),     // Now reads Qdrant API Key
         PineconeIndexHost: os.Getenv("QDRANT_URL"),         // Now reads Qdrant URL
         PineconeNamespace: getEnv("QDRANT_COLLECTION", "UpToDate"), // Now reads Qdrant Collection
-        RetrievalTopK:     getEnvAsInt("RAG_TOPK", 5),
+        RetrievalTopK:     getEnvAsInt("RAG_TOPK", 15),
 
         // SMS Service - ✅ Clean field population
         SMSAccessKey:  os.Getenv("SMS_ACCESS_KEY"), // No default
