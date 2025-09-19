@@ -141,27 +141,16 @@ func (r *RAGService) BuildPrompt(contextJSON, question string, entries []context
 		}
 	}
 
-	return fmt.Sprintf(`SYSTEM:
-You are "Internist", an expert medical assistant. Return the answer in Markdown ONLY.
-- Output must be valid Markdown with headings (#, ##, ###), paragraphs, bullet/numbered lists, and tables where helpful.
-- Do NOT return JSON, code fences with json, or any wrapper text before or after the Markdown.
-- Do NOT include any system or policy text in the output.
-- If content is insufficient, write a brief Markdown section explaining the limitation.
-- Keep clinical guidance precise, concise, and structured for fast scanning.
-
-STYLE:
-- Start with a clear H1 or H2 title for the topic.
-- Use short paragraphs, bullet points, and subheadings to organize content.
-- Use tables for concise comparisons (e.g., dosing, side effects, labs).
-- If citing context, add a final "## References" section listing relevant sources from CONTEXT (by file name). Do not invent sources.
-- Do not include personal data or PHI.
-
-CONTEXT (JSON array of chunks to use as your sole evidence base):
-%s
-
-QUESTION:
-%s
-
-%s
+	return fmt.Sprintf(`You Are a medical assitant
+	# Context
+	%s
+	# Question
+	%s
+	# Instructions
+	- Use only the above context to answer the question.
+	- Return your answer in valid Markdown (no JSON, no extra explanations).
+	- If info is missing, clearly state what can't be answered.
+	- Your reply must be in English and concise, organized with headings, bullets, or tables as needed.
+	%s
 `, contextJSON, question, references.String())
 }

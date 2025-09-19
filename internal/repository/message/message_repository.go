@@ -746,3 +746,42 @@ func (r *gormMessageRepository) FindRecentUserAndAssistantMessagesByType(
     }
     return users, lastAssistant, nil
 }
+
+
+// FindRecentUserAssistantPairs returns up to pairLimit most recent (user, assistant) pairs for chat (ordered oldest→newest).
+func (r *gormMessageRepository) FindRecentUserAssistantPairs(
+    ctx context.Context,
+    chatID uint,
+    pairLimit int,
+    userType string,
+) ([]domain.Message, error) {
+    if chatID == 0 {
+        return nil, errors.New("invalid chat ID")
+    }
+    // We fetch all messages for this chat, then pick pairs (user, assistant) in order.
+    var messages []domain.Message
+    err := r.db.WithContext(ctx).
+        Where("chat_id = ? AND (message_type = ? OR message_type = ?)", chatID, userType, "assistant").
+        Order("created_at asc").
+        Find(&messages).Error
+    if err != nil {
+        return nil, err
+    }
+
+    // Find properly alternating pairs (user→assistant), matching max pairs needed.
+    var pairs []domain.Message
+    var userMsg *domain.Message
+    for _, msg := range messages {
+        if msg.MessageType == userType {
+            userMsg = &msg
+        } else if msg.MessageType == "assistant" && userMsg != nil {
+            // Found a user→assistant pair; append both (user first, then assistant)
+            pairs = append(pairs, *userMsg, msg)
+            userMsg = nil
+        }
+        if len(pairs)/2 == pairLimit { // each pair is 2 messages
+            break
+        }
+    }
+    return pairs, nil
+}

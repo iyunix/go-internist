@@ -208,7 +208,7 @@ func (s *ChatService) StreamChatMessageWithSources(
 	onStatus func(status string, message string),
 ) error {
 	startTime := time.Now()
-	s.logger.Info("starting stream chat with performance monitoring",
+	s.logger.Info("starting stream chat",
 		"user_id", userID, "chat_id", chatID, "prompt_length", len(prompt))
 
 	originalPrompt := prompt
@@ -253,31 +253,32 @@ func (s *ChatService) StreamChatMessageWithSources(
 		_, _ = s.SaveMessage(ctx, userID, chatID, processedPrompt, "user_en")
 	}
 
-	// ----- Build embedding & LLM windows using English version -----
-	const usersWindowSize = 7
-	users, lastAssistant, err := s.messageRepo.FindRecentUserAndAssistantMessagesByType(ctx, chatID, usersWindowSize, "user_en")
-	if err != nil || len(users) == 0 {
-		// Fallback to original if no translated messages
-		users, lastAssistant, _ = s.messageRepo.FindRecentUserAndAssistantMessagesByType(ctx, chatID, usersWindowSize, "user")
+	// ----- Build embedding & LLM windows from alternating pairs -----
+	const memoryPairLimit = 3 // how many user–assistant pairs to remember
+
+	pairs, err := s.messageRepo.FindRecentUserAssistantPairs(ctx, chatID, memoryPairLimit, "user_en")
+	if err != nil || len(pairs) == 0 {
+		// fallback to empty if new chat
+		pairs = []domain.Message{}
 	}
 
-	// --- Embedding window: only previous user_en messages + current ---
 	var embeddingWindow []string
-	for _, u := range users {
-		embeddingWindow = append(embeddingWindow, u.Content)
-	}
-	embeddingWindow = append(embeddingWindow, processedPrompt)
-	embeddingText := strings.Join(embeddingWindow, "\n")
-
-	// --- LLM window: previous user_en messages + last assistant + current ---
 	var llmWindow []string
-	for _, u := range users {
-		llmWindow = append(llmWindow, u.Content)
+
+	for _, m := range pairs {
+		if m.MessageType == "user_en" {
+			// For retrieval you normally only use the user questions
+			embeddingWindow = append(embeddingWindow, m.Content)
+		}
+		// LLM window always gets the whole conversation (user & assistant)
+		llmWindow = append(llmWindow, m.Content)
 	}
-	if lastAssistant != nil {
-		llmWindow = append(llmWindow, lastAssistant.Content)
-	}
+
+	// Add the new prompt to both windows
+	embeddingWindow = append(embeddingWindow, processedPrompt)
 	llmWindow = append(llmWindow, processedPrompt)
+
+	embeddingText := strings.Join(embeddingWindow, "\n")
 	llmText := strings.Join(llmWindow, "\n")
 
 	// ----- Stream with separate embedding & LLM text -----
