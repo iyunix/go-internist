@@ -74,7 +74,7 @@ func (ts *TranslationService) NeedsTranslation(text string) bool {
 func (ts *TranslationService) TranslateToEnglish(ctx context.Context, text string) (string, error) {
     ts.logger.Info("Starting translation", "text", text)
 
-    systemPrompt := "Translate all user input Persian medical text to clear, precise English. Return only English, nothing else."
+    systemPrompt := "Translate the following Persian medical text to clear and precise English. Provide only the direct translation without any explanations, comments, or additional information."
     userPrompt := text
 
     requestBody := map[string]interface{}{

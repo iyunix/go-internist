@@ -90,9 +90,6 @@ func (r *RAGService) extractContextEntry(match *qdrant.ScoredPoint, index int) c
         if sectionHeading := r.getStringFromQdrantPayload(match.Payload, "section_heading"); sectionHeading != "" {
             entry.SectionHeading = sectionHeading
         }
-        if keyTakeaways := r.getStringFromQdrantPayload(match.Payload, "key_takeaways"); keyTakeaways != "" {
-            entry.KeyTakeaways = keyTakeaways
-        }
         if text := r.getStringFromQdrantPayload(match.Payload, "text"); text != "" {
             entry.Text = text
         }
@@ -160,7 +157,7 @@ func (r *RAGService) serializeContext(entries []contextEntry) string {
             return s
         }
 
-        fmt.Fprintf(&b, `  {"chunk_id":"%s","source_file":"%s","section_heading":"%s","key_takeaways":"%s","text":"%s","similarity":%s}`,
+        fmt.Fprintf(&b, `  {"chunk_id":"%s","source_file":"%s","section_heading":"%s",,"text":"%s","similarity":%s}`,
             esc(e.ChunkID), esc(e.SourceFile), esc(e.SectionHeading),
             esc(e.KeyTakeaways), esc(e.Text), e.Similarity)
     }
