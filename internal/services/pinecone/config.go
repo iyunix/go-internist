@@ -2,58 +2,60 @@
 package pinecone
 
 import (
-    "fmt"
+    "errors"
     "time"
 )
 
 type Config struct {
-    // Authentication
-    APIKey    string
+    // Connection settings (using existing field names for compatibility)
+    APIKey    string        // Qdrant API Key
+    IndexHost string        // Qdrant URL 
+    Namespace string        // Qdrant Collection Name
     
-    // Connection
-    IndexHost string
-    Namespace string
+    // Operation settings
+    Timeout        time.Duration
+    MaxRetries     int
+    RetryDelay     time.Duration
     
-    // Performance
-    Timeout    time.Duration
-    MaxRetries int
-    RetryDelay time.Duration
-    
-    // Vector Operations
-    BatchSize     int
-    IncludeValues bool
-    TopKLimit     int
-}
-
-func (c *Config) Validate() error {
-    if c.APIKey == "" {
-        return fmt.Errorf("PINECONE_API_KEY is required")
-    }
-    if c.IndexHost == "" {
-        return fmt.Errorf("PINECONE_INDEX_HOST is required")
-    }
-    if c.Namespace == "" {
-        return fmt.Errorf("PINECONE_NAMESPACE is required")
-    }
-    if c.Timeout <= 0 {
-        return fmt.Errorf("timeout must be positive")
-    }
-    if c.MaxRetries < 1 {
-        return fmt.Errorf("max_retries must be at least 1")
-    }
-    if c.BatchSize <= 0 {
-        return fmt.Errorf("batch_size must be positive")
-    }
-    return nil
+    // Performance settings
+    BatchSize      int
+    PoolSize       int
 }
 
 func DefaultConfig() *Config {
     return &Config{
-        Timeout:       20 * time.Second,
-        MaxRetries:    3,
-        RetryDelay:    time.Second,
-        BatchSize:     100,
-        IncludeValues: false,
-        TopKLimit:     50,
+        Timeout:        30 * time.Second,
+        MaxRetries:     3,
+        RetryDelay:     2 * time.Second,
+        BatchSize:      100,
+        PoolSize:       10,
     }
+}
+
+func (c *Config) Validate() error {
+    if c.IndexHost == "" {
+        return errors.New("qdrant URL is required")
+    }
+    
+    if c.APIKey == "" {
+        return errors.New("qdrant API key is required")
+    }
+    
+    if c.Namespace == "" {
+        return errors.New("qdrant collection name is required")
+    }
+    
+    if c.Timeout <= 0 {
+        return errors.New("timeout must be positive")
+    }
+    
+    if c.MaxRetries < 0 {
+        return errors.New("max retries cannot be negative")
+    }
+    
+    return nil
+}
+
+func (c *Config) GetTimeoutSeconds() uint64 {
+    return uint64(c.Timeout.Seconds())
 }

@@ -21,12 +21,18 @@ services:
       - AVALAI_API_KEY_EMBEDDING=${AVALAI_API_KEY_EMBEDDING}
       - AVALAI_API_KEY_TRANSLATION=${AVALAI_API_KEY_TRANSLATION}
       - JABIR_API_KEY=${JABIR_API_KEY}
-      - PINECONE_API_KEY=${PINECONE_API_KEY}
-      - PINECONE_INDEX_HOST=${PINECONE_INDEX_HOST}
+      # 🔄 UPDATED: Qdrant variables (replacing Pinecone)
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - QDRANT_URL=${QDRANT_URL}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION}
       - SMS_ACCESS_KEY=${SMS_ACCESS_KEY}
       - SMS_API_URL=${SMS_API_URL}
       - SMS_TEMPLATE_ID=512130
       - ADMIN_PHONE_NUMBER=09371997640
+      # Additional variables from your .env
+      - RAG_TOPK=8
+      - TRANSLATION_ENABLED=true
+      - EMBEDDING_MODEL_NAME=text-embedding-3-large
     depends_on:
       - postgres
 
@@ -40,7 +46,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "15432:5432"     # <-- changed host port to 5433 to resolve port conflict
+      - "15432:5432"     # <-- changed host port to 15432 to resolve port conflict
     restart: unless-stopped
 
 volumes:

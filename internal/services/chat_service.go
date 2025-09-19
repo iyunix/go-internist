@@ -27,10 +27,10 @@ type ServiceTimeouts struct {
 // DefaultTimeouts returns production-ready timeouts
 func DefaultTimeouts() *ServiceTimeouts {
     return &ServiceTimeouts{
-        Translation: 5 * time.Second,   // Translation should be fast
-        Embedding:   10 * time.Second,  // Embedding generation
-        Pinecone:    8 * time.Second,   // Vector search
-        LLM:         45 * time.Second,  // LLM generation (streaming)
+        Translation: 30 * time.Second,   // Translation should be fast
+        Embedding:   30 * time.Second,  // Embedding generation
+        Pinecone:    30 * time.Second,   // Vector search
+        LLM:         60 * time.Second,  // LLM generation (streaming)
         WarmupLLM:   90 * time.Second,  // First request can be slow (cold start)
     }
 }

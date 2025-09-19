@@ -675,48 +675,62 @@ func (r *gormMessageRepository) DeleteByChatID(ctx context.Context, chatID uint)
 
 
 // Get recent N user questions (descending order, exclude current)
-// Get last assistant message (descending order)
-func (r *gormMessageRepository) FindRecentUserAndAssistantMessages(ctx context.Context, chatID uint, userLimit int) ([]domain.Message, *domain.Message, error) {
-	// 1. Most recent user messages (DESC: newest first)
-	var users []domain.Message
-	if err := r.db.WithContext(ctx).
-		Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeUser).
-		Order("created_at DESC").
-		Limit(userLimit).
-		Find(&users).Error; err != nil {
-		return nil, nil, err
-	}
-	// 2. Most recent assistant message (DESC, pick the newest only)
-	var assistants []domain.Message
-	if err := r.db.WithContext(ctx).
-		Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeAssistant).
-		Order("created_at DESC").
-		Limit(1).
-		Find(&assistants).Error; err != nil {
-		return users, nil, err
-	}
-	var lastAssistant *domain.Message
-	if len(assistants) > 0 {
-		lastAssistant = &assistants[0]
-	}
+func (r *gormMessageRepository) FindRecentUserAndAssistantMessages(
+    ctx context.Context,
+    chatID uint,
+    userLimit int,
+) ([]domain.Message, *domain.Message, error) {
+    if chatID == 0 || userLimit <= 0 {
+        return nil, nil, errors.New("invalid parameters")
+    }
 
-	// (Optional) Reverse users slice: oldest to newest order
-	for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
-		users[i], users[j] = users[j], users[i]
-	}
-	return users, lastAssistant, nil
+    // Fetch only the needed user messages (DESC)
+    var users []domain.Message
+    if err := r.db.WithContext(ctx).
+        Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeUser).
+        Order("created_at DESC").
+        Limit(userLimit).
+        Find(&users).Error; err != nil {
+        return nil, nil, err
+    }
+
+    // Fetch only the last assistant message
+    var lastAssistant domain.Message
+    if err := r.db.WithContext(ctx).
+        Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeAssistant).
+        Order("created_at DESC").
+        Limit(1).
+        Find(&lastAssistant).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+        return users, nil, err
+    }
+
+    // Reverse user messages to oldest→newest
+    for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
+        users[i], users[j] = users[j], users[i]
+    }
+
+    var lastAssistantPtr *domain.Message
+    if lastAssistant.ID != 0 {
+        lastAssistantPtr = &lastAssistant
+    }
+
+    return users, lastAssistantPtr, nil
 }
 
 
 // Find recent user messages of a specific type (e.g., "user_en") plus last assistant message.
+// FindRecentUserAndAssistantMessagesByType - Efficient retrieval of recent user messages of a specific type + last assistant message
 func (r *gormMessageRepository) FindRecentUserAndAssistantMessagesByType(
     ctx context.Context,
     chatID uint,
     userLimit int,
     userType string,
 ) ([]domain.Message, *domain.Message, error) {
+    if chatID == 0 || userLimit <= 0 {
+        return nil, nil, errors.New("invalid parameters")
+    }
 
-    // 1. Get recent user messages (of given type)
+    // 1️⃣ Fetch recent user messages of the given type (descending order)
     var users []domain.Message
     if err := r.db.WithContext(ctx).
         Where("chat_id = ? AND message_type = ?", chatID, userType).
@@ -726,29 +740,32 @@ func (r *gormMessageRepository) FindRecentUserAndAssistantMessagesByType(
         return nil, nil, err
     }
 
-    // 2. Last assistant (as before)
-    var assistants []domain.Message
+    // 2️⃣ Fetch only the last assistant message
+    var lastAssistant domain.Message
     if err := r.db.WithContext(ctx).
         Where("chat_id = ? AND message_type = ?", chatID, domain.MessageTypeAssistant).
         Order("created_at DESC").
         Limit(1).
-        Find(&assistants).Error; err != nil {
+        Find(&lastAssistant).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
         return users, nil, err
     }
-    var lastAssistant *domain.Message
-    if len(assistants) > 0 {
-        lastAssistant = &assistants[0]
-    }
 
-    // Reverse user slice: oldest-to-newest
+    // 3️⃣ Reverse users slice to chronological order (oldest → newest)
     for i, j := 0, len(users)-1; i < j; i, j = i+1, j-1 {
         users[i], users[j] = users[j], users[i]
     }
-    return users, lastAssistant, nil
+
+    var lastAssistantPtr *domain.Message
+    if lastAssistant.ID != 0 {
+        lastAssistantPtr = &lastAssistant
+    }
+
+    return users, lastAssistantPtr, nil
 }
 
 
-// FindRecentUserAssistantPairs returns up to pairLimit most recent (user, assistant) pairs for chat (ordered oldest→newest).
+
+// FindRecentUserAssistantPairs - Efficiently fetch up to pairLimit recent (user→assistant) pairs.
 func (r *gormMessageRepository) FindRecentUserAssistantPairs(
     ctx context.Context,
     chatID uint,
@@ -758,30 +775,44 @@ func (r *gormMessageRepository) FindRecentUserAssistantPairs(
     if chatID == 0 {
         return nil, errors.New("invalid chat ID")
     }
-    // We fetch all messages for this chat, then pick pairs (user, assistant) in order.
+
+    if pairLimit <= 0 {
+        return nil, errors.New("pair limit must be > 0")
+    }
+
+    // Step 1: Fetch the last N*2 messages of relevant types (user + assistant) in descending order
+    // N*2 ensures we have enough messages to form pairs.
+    fetchLimit := pairLimit * 2
     var messages []domain.Message
     err := r.db.WithContext(ctx).
-        Where("chat_id = ? AND (message_type = ? OR message_type = ?)", chatID, userType, "assistant").
-        Order("created_at asc").
+        Where("chat_id = ? AND (message_type = ? OR message_type = ?)", chatID, userType, domain.MessageTypeAssistant).
+        Order("created_at DESC").
+        Limit(fetchLimit * 5). // fetch more to ensure enough valid pairs in sparse chats
         Find(&messages).Error
     if err != nil {
         return nil, err
     }
 
-    // Find properly alternating pairs (user→assistant), matching max pairs needed.
+    // Step 2: Reverse slice to chronological order (oldest → newest)
+    for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+        messages[i], messages[j] = messages[j], messages[i]
+    }
+
+    // Step 3: Build user→assistant pairs
     var pairs []domain.Message
     var userMsg *domain.Message
     for _, msg := range messages {
         if msg.MessageType == userType {
             userMsg = &msg
-        } else if msg.MessageType == "assistant" && userMsg != nil {
-            // Found a user→assistant pair; append both (user first, then assistant)
+        } else if msg.MessageType == domain.MessageTypeAssistant && userMsg != nil {
+            // append pair
             pairs = append(pairs, *userMsg, msg)
             userMsg = nil
         }
-        if len(pairs)/2 == pairLimit { // each pair is 2 messages
+        if len(pairs)/2 == pairLimit {
             break
         }
     }
+
     return pairs, nil
 }

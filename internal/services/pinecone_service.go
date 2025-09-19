@@ -4,7 +4,7 @@ package services
 import (
     "context"
     "github.com/iyunix/go-internist/internal/services/pinecone"
-    pineconeSDK "github.com/pinecone-io/go-pinecone/v4/pinecone"  // ADD ALIAS
+    qdrantSDK "github.com/qdrant/go-client/qdrant"
 )
 
 type PineconeService struct {
@@ -18,15 +18,12 @@ type PineconeService struct {
 func NewPineconeService(apiKey, indexHost, namespace string, logger Logger) (*PineconeService, error) {
     config := pinecone.DefaultConfig()
     config.APIKey = apiKey
-    config.IndexHost = indexHost
-    config.Namespace = namespace
+    config.IndexHost = indexHost  // This will be Qdrant URL
+    config.Namespace = namespace  // This will be Qdrant collection name
 
     if err := config.Validate(); err != nil {
         return nil, pinecone.NewConfigError(err.Error())
     }
-
-    // Use the logger passed to this constructor, not a NoOpLogger
-    // logger := prodLogger // <-- from DI or main.go
 
     clientService, err := pinecone.NewClientService(config, logger)
     if err != nil {
@@ -45,13 +42,12 @@ func NewPineconeService(apiKey, indexHost, namespace string, logger Logger) (*Pi
     }, nil
 }
 
-
-// Vector Operations - UPDATE TYPE REFERENCES
+// Vector Operations - Updated to return Qdrant types
 func (s *PineconeService) UpsertVector(ctx context.Context, id string, values []float32, metadata map[string]any) error {
     return s.vectorService.UpsertVector(ctx, id, values, metadata)
 }
 
-func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]*pineconeSDK.ScoredVector, error) {
+func (s *PineconeService) QuerySimilar(ctx context.Context, embedding []float32, topK int) ([]*qdrantSDK.ScoredPoint, error) {
     return s.vectorService.QuerySimilar(ctx, embedding, topK)
 }
 
@@ -59,7 +55,7 @@ func (s *PineconeService) DeleteVector(ctx context.Context, id string) error {
     return s.vectorService.DeleteVector(ctx, id)
 }
 
-func (s *PineconeService) FetchVector(ctx context.Context, id string) (*pineconeSDK.Vector, error) {
+func (s *PineconeService) FetchVector(ctx context.Context, id string) (*qdrantSDK.RetrievedPoint, error) {
     return s.vectorService.FetchVector(ctx, id)
 }
 
@@ -74,6 +70,10 @@ func (s *PineconeService) GetStatus(ctx context.Context) pinecone.ServiceStatus 
 
 // Retry Operations
 func (s *PineconeService) RetryWithTimeout(parentCtx context.Context, call func(ctx context.Context) error) error {
-    return s.retryService.RetryWithTimeout(parentCtx, call)
+    return s.retryService.RetryWithTimeout(call)
 }
 
+// Cleanup
+func (s *PineconeService) Close() error {
+    return s.clientService.Close()
+}

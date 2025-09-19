@@ -1,51 +1,65 @@
 // G:\go_internist\internal\services\pinecone\errors.go
 package pinecone
 
-import "fmt"
-
-type ErrorType string
-
-const (
-    ErrTypeConfig     ErrorType = "CONFIG"
-    ErrTypeAuth       ErrorType = "AUTH"
-    ErrTypeConnection ErrorType = "CONNECTION"
-    ErrTypeVector     ErrorType = "VECTOR"
-    ErrTypeQuery      ErrorType = "QUERY"
-    ErrTypeRetry      ErrorType = "RETRY"
-    ErrTypeQuota      ErrorType = "QUOTA"
-    ErrTypeValidation ErrorType = "VALIDATION"
+import (
+    "fmt"
 )
 
-type PineconeError struct {
-    Type      ErrorType
-    Operation string
-    Message   string
-    Index     string
-    Namespace string
-    VectorID  string
-    Cause     error
+// QdrantError represents a Qdrant-specific error (keeping compatible with existing error handling)
+type QdrantError struct {
+    Type    string
+    Message string
+    Err     error
 }
 
-func (e *PineconeError) Error() string {
-    if e.Cause != nil {
-        return fmt.Sprintf("Pinecone %s error in %s: %s (caused by: %v)", 
-            e.Type, e.Operation, e.Message, e.Cause)
+func (e *QdrantError) Error() string {
+    if e.Err != nil {
+        return fmt.Sprintf("qdrant %s error: %s: %v", e.Type, e.Message, e.Err)
     }
-    return fmt.Sprintf("Pinecone %s error in %s: %s", e.Type, e.Operation, e.Message)
+    return fmt.Sprintf("qdrant %s error: %s", e.Type, e.Message)
 }
 
-func NewConfigError(msg string) *PineconeError {
-    return &PineconeError{Type: ErrTypeConfig, Operation: "config", Message: msg}
+func (e *QdrantError) Unwrap() error {
+    return e.Err
 }
 
-func NewConnectionError(operation, msg string, cause error) *PineconeError {
-    return &PineconeError{Type: ErrTypeConnection, Operation: operation, Message: msg, Cause: cause}
+// Error constructors (keeping same names for compatibility)
+func NewConnectionError(errorType, message string, err error) *QdrantError {
+    return &QdrantError{
+        Type:    errorType,
+        Message: message,
+        Err:     err,
+    }
 }
 
-func NewVectorError(operation, vectorID, msg string, cause error) *PineconeError {
-    return &PineconeError{Type: ErrTypeVector, Operation: operation, VectorID: vectorID, Message: msg, Cause: cause}
+func NewOperationError(message string, err error) *QdrantError {
+    return &QdrantError{
+        Type:    "operation",
+        Message: message,
+        Err:     err,
+    }
 }
 
-func NewQueryError(operation, msg string, cause error) *PineconeError {
-    return &PineconeError{Type: ErrTypeQuery, Operation: operation, Message: msg, Cause: cause}
+func NewConfigError(message string) *QdrantError {
+    return &QdrantError{
+        Type:    "config",
+        Message: message,
+        Err:     nil,
+    }
+}
+
+func NewTimeoutError(message string, err error) *QdrantError {
+    return &QdrantError{
+        Type:    "timeout",
+        Message: message,
+        Err:     err,
+    }
+}
+
+func NewRetryError(message string, err error) *QdrantError {
+    return &QdrantError{
+        Type:    "retry",
+        Message: message,
+        Err:     err,
+    }
 }

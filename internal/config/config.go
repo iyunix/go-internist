@@ -38,10 +38,10 @@ type Config struct {
     JabirAPIKey             string
     EmbeddingModelName      string
 
-    // Vector Database
-    PineconeAPIKey    string
-    PineconeIndexHost string
-    PineconeNamespace string
+    // Vector Database (Updated for Qdrant but keeping Pinecone field names for compatibility)
+    PineconeAPIKey    string  // Now stores Qdrant API Key
+    PineconeIndexHost string  // Now stores Qdrant URL
+    PineconeNamespace string  // Now stores Qdrant Collection Name
     RetrievalTopK     int
 
     // SMS Configuration - ✅ Clean field definitions
@@ -61,7 +61,6 @@ func New() (*Config, error) {
     _ = godotenv.Load()
 
     env := getEnv("GO_ENV", "development")
-
 
     cfg := &Config{
         // Server Configuration
@@ -89,10 +88,10 @@ func New() (*Config, error) {
         JabirAPIKey:             os.Getenv("JABIR_API_KEY"),              // No default
         EmbeddingModelName:      getEnv("EMBEDDING_MODEL_NAME", "text-embedding-3-large"),
 
-        // Vector Database
-        PineconeAPIKey:    os.Getenv("PINECONE_API_KEY"),    // No default
-        PineconeIndexHost: os.Getenv("PINECONE_INDEX_HOST"), // No default
-        PineconeNamespace: getEnv("PINECONE_NAMESPACE", "UpToDate"),
+        // Vector Database (Updated for Qdrant)
+        PineconeAPIKey:    os.Getenv("QDRANT_API_KEY"),     // Now reads Qdrant API Key
+        PineconeIndexHost: os.Getenv("QDRANT_URL"),         // Now reads Qdrant URL
+        PineconeNamespace: getEnv("QDRANT_COLLECTION", "UpToDate"), // Now reads Qdrant Collection
         RetrievalTopK:     getEnvAsInt("RAG_TOPK", 5),
 
         // SMS Service - ✅ Clean field population
@@ -128,7 +127,7 @@ func New() (*Config, error) {
 
 // Validate checks configuration for required fields and security best practices.
 func (c *Config) Validate() error {
-    // Required secrets validation
+    // Required secrets validation (Updated for Qdrant)
     required := map[string]string{
         "JWT_SECRET_KEY":           c.JWTSecretKey,
         "DB_HOST":                  c.DBHost,
@@ -137,8 +136,8 @@ func (c *Config) Validate() error {
         "DB_NAME":                  c.DBName,
         "AVALAI_API_KEY_EMBEDDING": c.AvalaiAPIKeyEmbedding,
         "JABIR_API_KEY":            c.JabirAPIKey,
-        "PINECONE_API_KEY":         c.PineconeAPIKey,
-        "PINECONE_INDEX_HOST":      c.PineconeIndexHost,
+        "QDRANT_API_KEY":           c.PineconeAPIKey,    // Now validates Qdrant API Key
+        "QDRANT_URL":               c.PineconeIndexHost, // Now validates Qdrant URL
         "SMS_ACCESS_KEY":           c.SMSAccessKey,
         "SMS_API_URL":              c.SMSAPIURL,
         "ADMIN_PHONE_NUMBER":       c.AdminPhoneNumber,
@@ -272,5 +271,3 @@ func getDBSSLMode(env string) string {
     
     return mode
 }
-
-

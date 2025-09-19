@@ -6,13 +6,11 @@ import (
     "time"
 )
 
-// RetryService holds configuration and logger for retry operations
 type RetryService struct {
     config *Config
     logger Logger
 }
 
-// NewRetryService creates a new RetryService with given config and logger
 func NewRetryService(config *Config, logger Logger) *RetryService {
     return &RetryService{
         config: config,
@@ -20,63 +18,43 @@ func NewRetryService(config *Config, logger Logger) *RetryService {
     }
 }
 
-// RetryWithTimeout retries a given call up to MaxRetries, each with Timeout,
-// propagating the parent context (cancellation & deadline)
-func (r *RetryService) RetryWithTimeout(
-    parentCtx context.Context,
-    call func(ctx context.Context) error,
-) error {
+func (r *RetryService) RetryWithTimeout(call func(ctx context.Context) error) error {
+    ctx, cancel := context.WithTimeout(context.Background(), r.config.Timeout)
+    defer cancel()
+    
     var lastErr error
-
-    for attempt := 1; attempt <= r.config.MaxRetries; attempt++ {
-        // Use parentCtx so deadlines/cancellations propagate
-        ctx, cancel := context.WithTimeout(parentCtx, r.config.Timeout)
-
-        r.logger.Debug("attempting Pinecone operation",
-            "attempt", attempt,
-            "max_attempts", r.config.MaxRetries,
-            "timeout", r.config.Timeout.String())
-
+    
+    for attempt := 0; attempt <= r.config.MaxRetries; attempt++ {
+        if attempt > 0 {
+            r.logger.Debug("retrying operation", "attempt", attempt, "max_retries", r.config.MaxRetries)
+            select {
+            case <-ctx.Done():
+                return NewTimeoutError("operation timed out during retry", ctx.Err())
+            case <-time.After(r.config.RetryDelay):
+                // Continue with retry
+            }
+        }
+        
         err := call(ctx)
-        cancel()
-
         if err == nil {
-            if attempt > 1 {
-                r.logger.Info("Pinecone operation succeeded after retry",
-                    "attempt", attempt,
-                    "total_attempts", r.config.MaxRetries)
+            if attempt > 0 {
+                r.logger.Info("operation succeeded after retry", "attempts", attempt+1)
             }
             return nil
         }
-
+        
         lastErr = err
-        r.logger.Warn("Pinecone operation failed",
-            "attempt", attempt,
-            "max_attempts", r.config.MaxRetries,
-            "error", err)
-
+        
+        // Don't retry on context cancellation or certain errors
+        if ctx.Err() != nil {
+            return NewTimeoutError("operation timed out", ctx.Err())
+        }
+        
         if attempt < r.config.MaxRetries {
-            backoffDuration := time.Duration(attempt) * r.config.RetryDelay
-            r.logger.Debug("backing off before retry",
-                "backoff_duration", backoffDuration.String())
-            time.Sleep(backoffDuration)
+            r.logger.Warn("operation failed, retrying", "attempt", attempt+1, "error", err)
         }
     }
-
-    r.logger.Error("Pinecone operation failed after all retries",
-        "total_attempts", r.config.MaxRetries,
-        "final_error", lastErr)
-
-    return NewRetryError("retry_exhausted",
-        "operation failed after all retries", lastErr)
-}
-
-// NewRetryError constructs a PineconeError for retry exhaustion
-func NewRetryError(operation, msg string, cause error) *PineconeError {
-    return &PineconeError{
-        Type:      ErrTypeRetry,
-        Operation: operation,
-        Message:   msg,
-        Cause:     cause,
-    }
+    
+    r.logger.Error("operation failed after all retries", "attempts", r.config.MaxRetries+1, "error", lastErr)
+    return NewRetryError("operation failed after all retries", lastErr)
 }
