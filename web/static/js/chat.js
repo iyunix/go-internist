@@ -287,18 +287,19 @@ async function streamAssistantResponse(chatId, prompt) {
   }
 
   let statuses = {
-    translating: "pending",
-    understanding: "pending",
+    retrieving_context: "pending",
+    processing: "pending", 
     searching: "pending",
     thinking: "pending",
   };
   const updateStatusUI = () => {
     const steps = [
-      { id: "translating", text: "Translating to English..." },
-      { id: "understanding", text: "Understanding question..." },
-      { id: "searching", text: "Searching UpToDate..." },
+      { id: "retrieving_context", text: "Analyzing conversation history..." },
+      { id: "processing", text: "Processing your question..." },
+      { id: "searching", text: "Searching UpToDate..." }, 
       { id: "thinking", text: "Generating response..." },
     ];
+
     if (!statusContainer()) return;
     statusContainer().innerHTML = steps
       .map(step => {

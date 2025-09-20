@@ -4,6 +4,7 @@ package services
 import (
     "context"
     "errors"
+    "fmt"
     "strings"
     "time"
     "sync"
@@ -200,65 +201,174 @@ func NewChatService(
     }, nil
 }
 
+// ENHANCED: LLM context with current query prioritization and attention guidance
+func (s *ChatService) buildEnhancedLLMContext(pairs []domain.Message, currentQuery string) string {
+    var contextParts []string
+    
+    // 1. PRIORITY: Current question with clear emphasis
+    currentEmphasis := fmt.Sprintf("🎯 CURRENT MEDICAL QUESTION: %s", currentQuery)
+    contextParts = append(contextParts, currentEmphasis)
+    
+    // 2. Add conversation context if exists (compressed)
+    if len(pairs) > 0 {
+        contextParts = append(contextParts, "\n💬 CONVERSATION CONTEXT:")
+        
+        // Compress previous exchanges to key medical facts only
+        for i, m := range pairs {
+            if m.MessageType == "internal_context" {
+                // Compress user messages to key medical terms
+                compressed := s.compressMedicalQuery(m.Content)
+                contextParts = append(contextParts, fmt.Sprintf("Previous Q%d: %s", (i/2)+1, compressed))
+            } else if m.MessageType == "assistant" {
+                // Compress AI responses to key medical facts (max 100 chars)
+                compressed := s.compressAssistantResponse(m.Content)
+                contextParts = append(contextParts, fmt.Sprintf("Previous A%d: %s", (i/2)+1, compressed))
+            }
+        }
+    }
+    
+    // 3. INSTRUCTION: Clear task definition
+    instruction := fmt.Sprintf("\n⚡ FOCUS INSTRUCTION: Answer the CURRENT question above. Previous context is for reference only. Topic: %s", 
+        s.detectMedicalIntent(currentQuery))
+    contextParts = append(contextParts, instruction)
+    
+    return strings.Join(contextParts, "\n")
+}
+
+// Helper: Compress medical queries to key terms
+func (s *ChatService) compressMedicalQuery(query string) string {
+    if len(query) <= 80 {
+        return query
+    }
+    // Extract key medical terms (simplified approach)
+    return query[:80] + "..."
+}
+
+// Helper: Compress assistant responses to key medical facts
+func (s *ChatService) compressAssistantResponse(response string) string {
+    if len(response) <= 100 {
+        return response
+    }
+    
+    // Look for key medical terms and extract first sentence
+    sentences := strings.Split(response, ".")
+    if len(sentences) > 0 && len(sentences[0]) > 0 {
+        firstSentence := strings.TrimSpace(sentences[0])
+        if len(firstSentence) <= 100 {
+            return firstSentence + "."
+        }
+        return firstSentence[:97] + "..."
+    }
+    
+    return response[:97] + "..."
+}
+
+// Helper: Detect medical intent for instruction clarity
+func (s *ChatService) detectMedicalIntent(query string) string {
+    queryLower := strings.ToLower(query)
+    
+    if strings.Contains(queryLower, "treatment") || strings.Contains(queryLower, "medication") || 
+       strings.Contains(queryLower, "drug") || strings.Contains(queryLower, "therapy") {
+        return "TREATMENT/MEDICATIONS"
+    }
+    if strings.Contains(queryLower, "complication") || strings.Contains(queryLower, "dangerous") || 
+       strings.Contains(queryLower, "risk") {
+        return "COMPLICATIONS/RISKS"  
+    }
+    if strings.Contains(queryLower, "diagnosis") || strings.Contains(queryLower, "symptom") || 
+       strings.Contains(queryLower, "sign") {
+        return "DIAGNOSIS/SYMPTOMS"
+    }
+    
+    return "GENERAL MEDICAL QUERY"
+}
+
 func (s *ChatService) StreamChatMessageWithSources(
-	ctx context.Context,
-	userID, chatID uint,
-	prompt string,
-	onDelta func(string) error,
-	onSources func([]string),
-	onStatus func(status string, message string),
+    ctx context.Context,
+    userID, chatID uint,
+    prompt string,
+    onDelta func(string) error,
+    onSources func([]string),
+    onStatus func(status string, message string),
 ) error {
-	startTime := time.Now()
-	s.logger.Info("starting stream chat",
-		"user_id", userID, "chat_id", chatID, "prompt_length", len(prompt))
+    startTime := time.Now()
+    s.logger.Info("starting stream chat",
+        "user_id", userID, "chat_id", chatID, "prompt_length", len(prompt))
 
-	originalPrompt := prompt
-	processedPrompt := prompt
+    originalPrompt := prompt
+    
+    // ----- STEP 1: Get conversation context BEFORE processing -----
+    const memoryPairLimit = 3
+    
+    onStatus("retrieving_context", "Analyzing conversation history...")
+    
+    pairs, err := s.messageRepo.FindRecentUserAssistantPairs(ctx, chatID, memoryPairLimit, "internal_context")
+    if err != nil {
+        s.logger.Warn("Failed to retrieve conversation history", "error", err)
+        pairs = []domain.Message{} // Continue with empty context
+    }
 
-	// --- Translation logic with circuit breaker ---
-	if s.translationService != nil && s.translationService.NeedsTranslation(prompt) {
-		onStatus("translating", "Processing text for optimal search...")
-		translationCB := s.circuitBreakers["translation"]
-		if translationCB.GetState() == "open" {
-			s.logger.Warn("Translation circuit breaker is open; skipping translation")
-			onStatus("translation_skipped", "Translation service unavailable")
-			return errors.New("translation service unavailable (circuit breaker open)")
-		}
+    var embeddingQuery, llmQuery string
 
-		err := translationCB.Call(func() error {
-			timeoutCtx, cancel := context.WithTimeout(ctx, s.timeouts.Translation)
-			defer cancel()
-			translated, err := s.translationService.TranslateToEnglish(timeoutCtx, prompt)
-			if err != nil {
-				return err
-			}
-			processedPrompt = translated
-			return nil
-		})
-		if err != nil {
-			s.logger.Warn("Translation failed", "error", err)
-			onStatus("translation_failed", "Translation failed")
-			return err
-		}
-		onStatus("translated", "Text optimized for search")
-	}
+    // ----- STEP 2: ENHANCED processing for ALL queries (Persian + English) -----
+    if s.translationService != nil {
+        onStatus("processing", "Processing your question...")
+        
+        translationCB := s.circuitBreakers["translation"]
+        if translationCB.GetState() == "open" {
+            s.logger.Warn("Translation circuit breaker is open; using fallback")
+            embeddingQuery = prompt
+            llmQuery = prompt
+        } else {
+            err := translationCB.Call(func() error {
+                timeoutCtx, cancel := context.WithTimeout(ctx, s.timeouts.Translation)
+                defer cancel()
+                
+                // Use enhanced processing for ALL queries
+                embQ, llmQ, err := s.translationService.TranslateWithMedicalContext(
+                    timeoutCtx, 
+                    prompt, 
+                    pairs, // Pass conversation history
+                )
+                if err != nil {
+                    return err
+                }
+                embeddingQuery = embQ
+                llmQuery = llmQ
+                return nil
+            })
+            
+            if err != nil {
+                s.logger.Warn("Enhanced processing failed, using original query", "error", err)
+                // Fallback: use original query
+                embeddingQuery = prompt
+                llmQuery = prompt
+            }
+        }
+        
+        onStatus("processed", "Processing your question...")
+    } else {
+        // No translation service available
+        embeddingQuery = prompt
+        llmQuery = prompt
+    }
 
-    if originalPrompt != processedPrompt {
-        // 1. Save the original user message for display.
+    // ----- STEP 3: Save messages -----
+    if originalPrompt != llmQuery {
+        // Save original user message for display
         _, err := s.SaveMessage(ctx, userID, chatID, originalPrompt, "user")
         if err != nil {
             s.logger.Error("failed to save original user message", "error", err)
             return err
         }
 
-        // 2. Save the translated version ONLY for internal RAG/memory use.
-        _, err = s.SaveMessage(ctx, userID, chatID, processedPrompt, "internal_context")
+        // Save processed version for internal context
+        _, err = s.SaveMessage(ctx, userID, chatID, llmQuery, "internal_context")
         if err != nil {
             s.logger.Error("failed to save internal context message", "error", err)
-            // This error is not critical for the user, so we can just log it.
         }
     } else {
-        // If there was no translation, save the prompt for both display and internal use.
+        // No processing - save for both display and internal use
         _, err := s.SaveMessage(ctx, userID, chatID, originalPrompt, "user")
         if err != nil {
             s.logger.Error("failed to save user message", "error", err)
@@ -270,62 +380,52 @@ func (s *ChatService) StreamChatMessageWithSources(
         }
     }
 
-	// ----- Build embedding & LLM windows from alternating pairs -----
-	const memoryPairLimit = 3 // how many user–assistant pairs to remember
+    // ----- STEP 4: Build SEPARATE embedding and LLM windows -----
+    // Refresh pairs to include the new message
+    pairs, err = s.messageRepo.FindRecentUserAssistantPairs(ctx, chatID, memoryPairLimit, "internal_context")
+    if err != nil {
+        pairs = []domain.Message{}
+    }
 
-    pairs, err := s.messageRepo.FindRecentUserAssistantPairs(ctx, chatID, memoryPairLimit, "internal_context")
-	if err != nil || len(pairs) == 0 {
-		// fallback to empty if new chat
-		pairs = []domain.Message{}
-	}
+    // Use enhanced LLM context instead of simple concatenation
+    llmText := s.buildEnhancedLLMContext(pairs, llmQuery)
 
-	var embeddingWindow []string
-	var llmWindow []string
+    // For EMBEDDING: Use the FOCUSED query only (KEY ENHANCEMENT)
+    embeddingText := embeddingQuery
 
-	for _, m := range pairs {
-        if m.MessageType == "internal_context" {
-			// For retrieval you normally only use the user questions
-            embeddingWindow = append(embeddingWindow, m.Content)
-		}
-		// LLM window always gets the whole conversation (user & assistant)
-        llmWindow = append(llmWindow, m.Content)
-	}
+    s.logger.Info("Prepared queries for RAG",
+        "embedding_query", embeddingText,
+        "embedding_length", len(embeddingText),
+        "llm_context_length", len(llmText),
+        "pairs_count", len(pairs))
 
-	// Add the new prompt to both windows
-	embeddingWindow = append(embeddingWindow, processedPrompt)
-	llmWindow = append(llmWindow, processedPrompt)
+    // ----- STEP 5: Stream with SEPARATE embedding and LLM text -----
+    onStatus("searching", "Finding relevant medical information...")
+    
+    err = s.streamService.StreamChatResponse(
+        ctx,
+        userID,
+        chatID,
+        embeddingText, // FOCUSED query for vector search
+        llmText,       // Enhanced context for LLM prompt
+        onDelta,
+        onSources,
+        onStatus,
+    )
 
-	embeddingText := strings.Join(embeddingWindow, "\n")
-	llmText := strings.Join(llmWindow, "\n")
+    if err == nil {
+        s.warmupTracker.MarkWarmedUp("llm")
+        s.warmupTracker.MarkWarmedUp("embedding")
+        s.warmupTracker.MarkWarmedUp("pinecone")
+    }
 
-	// ----- Stream with separate embedding & LLM text -----
-	err = s.streamService.StreamChatResponse(
-		ctx,
-		userID,
-		chatID,
-		embeddingText, // for vector search/embedding
-		llmText,       // for LLM prompt
-		onDelta,
-		onSources,
-		onStatus,
-	)
+    s.logger.Info("stream chat completed",
+        "user_id", userID,
+        "total_time", time.Since(startTime),
+        "error", err)
 
-	if err == nil {
-		s.warmupTracker.MarkWarmedUp("llm")
-		s.warmupTracker.MarkWarmedUp("embedding")
-		s.warmupTracker.MarkWarmedUp("pinecone")
-	}
-
-	s.logger.Info("stream chat completed",
-		"user_id", userID,
-		"total_time", time.Since(startTime),
-		"error", err)
-
-	return err
+    return err
 }
-
-
-
 
 // CreateChat creates a new chat with validation and timeout
 func (s *ChatService) CreateChat(ctx context.Context, userID uint, title string) (*domain.Chat, error) {
@@ -356,7 +456,6 @@ func (s *ChatService) GetChatMessagesWithPagination(ctx context.Context, userID,
     // Always fetch paginated
     return s.messageRepo.FindByChatIDWithPagination(dbCtx, chatID, limit, offset)
 }
-
 
 // DeleteChat deletes a chat with proper cleanup and timeout
 func (s *ChatService) DeleteChat(ctx context.Context, userID, chatID uint) error {

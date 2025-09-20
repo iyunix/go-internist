@@ -196,16 +196,19 @@ func (h *ChatHandler) StreamChatSSE(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- 2. Balance Check & Deduction ---
-	canAsk, _, err := h.UserService.CanUserAskQuestion(r.Context(), userID, len(prompt))
-	if err != nil {
-		http.Error(w, "Error checking balance", http.StatusInternalServerError)
-		return
-	}
-	if !canAsk {
-		http.Error(w, "Insufficient character balance.", http.StatusPaymentRequired)
-		return
-	}
-	actualCharge, err := h.UserService.DeductCharactersForQuestion(r.Context(), userID, len(prompt))
+    originalPromptLength := len(prompt)
+
+    // Balance check and deduction should use ONLY the original user query length
+    canAsk, _, err := h.UserService.CanUserAskQuestion(r.Context(), userID, originalPromptLength)
+    if err != nil {
+        http.Error(w, "Error checking balance", http.StatusInternalServerError)
+        return
+    }
+    if !canAsk {
+        http.Error(w, "Insufficient character balance.", http.StatusPaymentRequired)
+        return
+    }
+    actualCharge, err := h.UserService.DeductCharactersForQuestion(r.Context(), userID, originalPromptLength)
 	if err != nil {
 		http.Error(w, "Error processing payment", http.StatusInternalServerError)
 		return
